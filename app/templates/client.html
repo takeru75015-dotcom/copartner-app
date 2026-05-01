@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% block title %}{{ client.name }}{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <a href="/dashboard" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>一覧に戻る</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <h4 class="fw-bold mb-1">{{ client.name }}</h4>
+        <p class="text-muted mb-0">
+          <i class="fas fa-building me-1"></i>{{ client.industry or '業種未設定' }}
+          {% if client.note %}&nbsp;|&nbsp; {{ client.note }}{% endif %}
+        </p>
+        {% if client.business_details %}
+        <div class="mt-2 p-2" style="background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;">
+          <div class="small text-muted mb-1"><i class="fas fa-info-circle me-1"></i>事業構成（ヒアリング情報）</div>
+          <div style="white-space: pre-wrap; font-size: .9rem;">{{ client.business_details }}</div>
+        </div>
+        {% endif %}
+      </div>
+      <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#clientEdit">
+        <i class="fas fa-edit me-1"></i>事業構成を編集
+      </button>
+    </div>
+
+    <div id="clientEdit" class="collapse mt-3">
+      <form method="post" action="/clients/{{ client.id }}/update" class="border-top pt-3">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">業種</label>
+            <input type="text" name="industry" class="form-control form-control-sm" value="{{ client.industry or '' }}" placeholder="例: 卸売業、飲食店、ソフトウェア">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small fw-semibold">メモ</label>
+            <input type="text" name="note" class="form-control form-control-sm" value="{{ client.note or '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold">
+              事業構成の詳細
+              <span class="text-muted fw-normal">（社長にヒアリングした内容。売上構成・主要取引先・業態の特徴など）</span>
+            </label>
+            <textarea name="business_details" class="form-control form-control-sm" rows="4"
+              placeholder="例:&#10;- 売上の70%が卸売（飲食店向け食材）、30%がEC直販（個人向けギフト）&#10;- 主要仕入先は3社（国産コーヒー豆）&#10;- 顧客数：法人80社、個人約2,000人">{{ client.business_details or '' }}</textarea>
+          </div>
+        </div>
+        <div class="mt-2">
+          <button type="submit" class="btn btn-primary btn-sm" style="background:#1a237e;border-color:#1a237e;">
+            <i class="fas fa-save me-1"></i>保存
+          </button>
+          <span class="small text-muted ms-2">保存後、AI分析の精度が上がります</span>
+        </div>
+      </form>
+
+      <div class="border-top pt-3 mt-3">
+        <div class="small fw-semibold mb-2"><i class="fas fa-file-upload me-1 text-primary"></i>会社概要・事業計画・KPI進捗 などのPDFをアップロード</div>
+        <div class="small text-muted mb-2">ピッチ資料・事業計画書・カタログ など。AIが自動で事業構成テキストに追記します。</div>
+        <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
+          <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
+          <button type="submit" class="btn btn-outline-primary btn-sm flex-shrink-0">
+            <i class="fas fa-magic me-1"></i>AIで読取＆追記
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if upload_errors %}
+<div class="alert alert-warning">
+  <i class="fas fa-exclamation-triangle me-2"></i>一部のファイルで問題が発生しました：
+  <ul class="mb-0 mt-1">{% for e in upload_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if msg %}
+<div class="alert alert-success">
+  <i class="fas fa-check-circle me-2"></i>{{ msg }}
+</div>
+{% endif %}
+
+{% if quality_issues %}
+<div class="card mb-4" style="border: 2px solid #f59e0b; background: linear-gradient(135deg, #fff7ed, #fef3c7);">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3" style="color: #b45309;">
+      <i class="fas fa-info-circle me-2"></i>データ品質チェック — 整理を推奨します
+    </h6>
+    {% for issue in quality_issues %}
+    <div class="mb-3 p-3 rounded" style="background: #fff; border-left: 4px solid {% if issue.severity == 'high' %}#dc2626{% elif issue.severity == 'medium' %}#f59e0b{% else %}#3b82f6{% endif %};">
+      <div class="fw-bold mb-1">{{ issue.title }}</div>
+      <div class="small text-muted mb-2">{{ issue.message }}</div>
+      <div class="small" style="color: #1f2937;">
+        <strong>👉 推奨アクション：</strong>{{ issue.action }}
+      </div>
+    </div>
+    {% endfor %}
+    <div class="small text-muted mt-2">
+      💡 <strong>データ整理のコツ</strong>：年次決算（PL推移表・残高試算表）を優先。月次推移は1ファイル=1期に集約。予算・事業計画ファイルは自動でスキップされます。
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- PDFアップロード（メイン） -->
+<div class="card mb-4" style="border: 2px dashed #3b82f6;">
+  <div class="card-body text-center py-4">
+    <i class="fas fa-file-upload fa-3x mb-3" style="color:#3b82f6;"></i>
+    <h5 class="fw-bold mb-1">決算書をアップロード（PDF / Excel対応）</h5>
+    <p class="text-muted small mb-3">複数年分を一度にアップ可能。PDF決算書・月次推移Excel・残高試算表 等、AIが自動で数値を読み取ります。</p>
+    <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
+      <div class="mb-3">
+        <input type="file" name="files" id="pdfFiles" class="form-control" accept=".pdf,.xlsx,.xlsm,.xls" multiple required>
+        <div class="form-text">複数選択OK（Ctrl/Cmdを押しながらクリック）</div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg px-5" style="background:#1a237e;border-color:#1a237e;">
+        <i class="fas fa-brain me-2"></i>AIで読み取って分析
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- 手入力（折りたたみ） -->
+<div class="accordion mb-4" id="manualInputAccordion">
+  <div class="accordion-item" style="border-radius:12px;overflow:hidden;">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#manualInput">
+        <i class="fas fa-keyboard me-2"></i>手入力する場合はこちら
+      </button>
+    </h2>
+    <div id="manualInput" class="accordion-collapse collapse">
+      <div class="accordion-body">
+        <form method="post" action="/clients/{{ client.id }}/financials/add">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">対象期間 <span class="text-danger">*</span></label>
+              <input type="text" name="period" class="form-control" required placeholder="例: 2024年3月期">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">売上高（万円）</label>
+              <input type="number" name="revenue" class="form-control" step="0.1" value="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">売上原価（万円）</label>
+              <input type="number" name="cost_of_sales" class="form-control" step="0.1" value="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">売上総利益（万円）</label>
+              <input type="number" name="gross_profit" class="form-control" step="0.1" value="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">販管費（万円）</label>
+              <input type="number" name="selling_expenses" class="form-control" step="0.1" value="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">営業利益（万円）</label>
+              <input type="number" name="operating_profit" class="form-control" step="0.1" value="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">経常利益（万円）</label>
+              <input type="number" name="ordinary_profit" class="form-control" step="0.1" value="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">当期純利益（万円）</label>
+              <input type="number" name="net_profit" class="form-control" step="0.1" value="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">前期売上高（万円）</label>
+              <input type="number" name="prev_revenue" class="form-control" step="0.1" value="0">
+            </div>
+          </div>
+          <div class="mt-3">
+            <button type="submit" class="btn btn-success px-4">
+              <i class="fas fa-brain me-2"></i>AIで分析する
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 過去データ一覧 -->
+{% if financials %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#f1f5ff;">
+    <span class="fw-bold"><i class="fas fa-history me-2" style="color:#1a237e;"></i>登録済みの期データ（{{ financials|length }}件）</span>
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="post" action="/clients/{{ client.id }}/recalc-from-breakdown" class="d-inline" onsubmit="return confirm('内訳データから在庫・売掛・現金・有利子負債を再計算します。よろしいですか？');">
+        <button type="submit" class="btn btn-sm btn-outline-info">
+          <i class="fas fa-calculator me-1"></i>内訳から再計算
+        </button>
+      </form>
+      <form method="post" action="/clients/{{ client.id }}/cleanup-duplicates" class="d-inline" onsubmit="return confirm('同じ期のデータを正規化＆マージします。よろしいですか？');">
+        <button type="submit" class="btn btn-sm btn-outline-warning">
+          <i class="fas fa-broom me-1"></i>重複期を整理
+        </button>
+      </form>
+      <form method="post" action="/clients/{{ client.id }}/reset-financials" class="d-inline" onsubmit="return confirm('このクライアントの【全】財務データを削除します。元に戻せません。よろしいですか？');">
+        <button type="submit" class="btn btn-sm btn-outline-danger">
+          <i class="fas fa-trash-alt me-1"></i>全期リセット
+        </button>
+      </form>
+      {% if financials|length >= 2 %}
+      <a href="/clients/{{ client.id }}/compare?ids={% for fd in financials %}{{ fd.id }}{% if not loop.last %},{% endif %}{% endfor %}" class="btn btn-sm btn-outline-primary">
+        <i class="fas fa-chart-line me-1"></i>全期間を比較分析
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="list-group list-group-flush">
+    {% for fd in financials %}
+    {% set is_thin = (not fd.revenue) or (not fd.cost_of_sales and not fd.selling_expenses) %}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 {% if is_thin %}bg-light{% endif %}">
+      <div>
+        <span class="fw-semibold">{{ fd.period }}</span>
+        {% if is_thin %}<span class="badge bg-warning text-dark ms-2 small">⚠️ データ不足</span>{% endif %}
+        <div class="text-muted small mt-1">
+          売上: {{ "{:,.0f}".format(fd.revenue or 0) }}万 /
+          原価: {{ "{:,.0f}".format(fd.cost_of_sales or 0) }}万 /
+          販管費: {{ "{:,.0f}".format(fd.selling_expenses or 0) }}万 /
+          営業利益: {{ "{:,.0f}".format(fd.operating_profit or 0) }}万
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/financials/{{ fd.id }}/analyze" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-chart-bar me-1"></i>単年分析
+        </a>
+        <form method="post" action="/financials/{{ fd.id }}/delete" class="d-inline" onsubmit="return confirm('この期のデータを削除しますか？');">
+          <button type="submit" class="btn btn-outline-danger btn-sm" title="この期のデータを削除"><i class="fas fa-trash"></i></button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% block scripts %}
+<script>
+// ファイル選択時にファイル名を表示
+document.getElementById('pdfFiles').addEventListener('change', function() {
+  const files = this.files;
+  const label = files.length > 1 ? `${files.length}件のPDFを選択中` : files[0]?.name || '';
+  this.nextElementSibling.textContent = label;
+});
+
+// 送信中にローディング表示
+document.querySelector('form[action*="upload-pdf"]').addEventListener('submit', function() {
+  const btn = this.querySelector('button[type="submit"]');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>読み取り中... しばらくお待ちください';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}
+{% endblock %}

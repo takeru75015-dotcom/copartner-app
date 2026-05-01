@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}複数年比較 - {{ client.name }}{% endblock %}
+{% block content %}
+<div class="mb-3 d-flex gap-2">
+  <a href="/clients/{{ client.id }}" class="btn btn-outline-secondary btn-sm">
+    <i class="fas fa-arrow-left me-1"></i>クライアントに戻る
+  </a>
+</div>
+
+<h4 class="fw-bold mb-1">{{ client.name }} — {{ financials|length }}期比較分析</h4>
+<p class="text-muted small mb-4">{{ client.industry or '' }}</p>
+
+{% if errors %}
+<div class="alert alert-warning">
+  <i class="fas fa-exclamation-triangle me-2"></i>一部ファイルの読み取りに問題がありました：
+  <ul class="mb-0 mt-1">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<!-- 数値サマリーテーブル -->
+<div class="card mb-4">
+  <div class="card-header fw-bold" style="background:#f1f5ff;">
+    <i class="fas fa-table me-2" style="color:#1a237e;"></i>財務データ一覧（万円）
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>項目</th>
+          {% for fd in financials %}<th class="text-end">{{ fd.period }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set rows = [
+          ("売上高", "revenue"),
+          ("売上原価", "cost_of_sales"),
+          ("売上総利益", "gross_profit"),
+          ("販管費", "selling_expenses"),
+          ("営業利益", "operating_profit"),
+          ("経常利益", "ordinary_profit"),
+          ("当期純利益", "net_profit"),
+        ] %}
+        {% for label, attr in rows %}
+        <tr {% if attr in ["gross_profit","operating_profit","net_profit"] %}class="fw-semibold"{% endif %}>
+          <td>{{ label }}</td>
+          {% for fd in financials %}
+          <td class="text-end">
+            {% set val = fd[attr] if fd[attr] is defined else fd.__dict__[attr] %}
+            {% set val = fd.__dict__[attr] %}
+            <span class="{% if attr in ['operating_profit','net_profit'] and val < 0 %}text-danger{% endif %}">
+              {{ "{:,.0f}".format(val) }}
+            </span>
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        <tr class="table-light">
+          <td>粗利率</td>
+          {% for fd in financials %}
+          <td class="text-end">{{ "%.1f"|format(fd.gross_profit / fd.revenue * 100 if fd.revenue else 0) }}%</td>
+          {% endfor %}
+        </tr>
+        <tr class="table-light">
+          <td>営業利益率</td>
+          {% for fd in financials %}
+          <td class="text-end">{{ "%.1f"|format(fd.operating_profit / fd.revenue * 100 if fd.revenue else 0) }}%</td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if result %}
+<!-- トレンド評価 -->
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-start gap-3">
+      <div>
+        {% if result.trend_label == "成長" %}
+          <span class="badge fs-6 px-3 py-2" style="background:#22c55e;">成長</span>
+        {% elif result.trend_label == "安定" %}
+          <span class="badge fs-6 px-3 py-2" style="background:#3b82f6;">安定</span>
+        {% elif result.trend_label == "横ばい" %}
+          <span class="badge fs-6 px-3 py-2" style="background:#f59e0b;">横ばい</span>
+        {% else %}
+          <span class="badge fs-6 px-3 py-2" style="background:#ef4444;">悪化</span>
+        {% endif %}
+      </div>
+      <div>
+        <h6 class="fw-bold text-muted mb-1">トレンド総評</h6>
+        <p class="mb-2">{{ result.trend_summary }}</p>
+        <div class="row g-2 small text-muted">
+          <div class="col-md-6"><i class="fas fa-chart-line me-1 text-primary"></i>{{ result.revenue_trend }}</div>
+          <div class="col-md-6"><i class="fas fa-coins me-1 text-success"></i>{{ result.profit_trend }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <!-- 重要な発見 -->
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="fas fa-lightbulb me-2 text-warning"></i>重要な発見</h6>
+      {% for f in result.key_findings %}
+      <div class="strength-item">{{ f }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  <!-- リスク -->
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="fas fa-exclamation-circle me-2 text-danger"></i>リスク・課題</h6>
+      {% for r in result.risks %}
+      <div class="issue-item">{{ r }}</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- アクション提案 -->
+<div class="card mb-4">
+  <div class="card-header fw-bold" style="background:#f1f5ff;">
+    <i class="fas fa-tasks me-2" style="color:#1a237e;"></i>アクション提案
+  </div>
+  <div class="card-body">
+    {% for action in result.actions %}
+    <div class="d-flex gap-3 mb-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+      <div class="flex-shrink-0">
+        {% if action.priority == '高' %}
+          <span class="priority-high fw-semibold">優先度 高</span>
+        {% elif action.priority == '中' %}
+          <span class="priority-mid fw-semibold">優先度 中</span>
+        {% else %}
+          <span class="priority-low fw-semibold">優先度 低</span>
+        {% endif %}
+      </div>
+      <div>
+        <div class="fw-bold">{{ action.title }}</div>
+        <div class="text-muted small mt-1">{{ action.detail }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- 各年の単年分析リンク -->
+<div class="card">
+  <div class="card-header fw-bold" style="background:#f1f5ff;">
+    <i class="fas fa-search me-2" style="color:#1a237e;"></i>各期の詳細分析
+  </div>
+  <div class="list-group list-group-flush">
+    {% for fd in financials %}
+    <div class="list-group-item d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">{{ fd.period }}</span>
+      <a href="/financials/{{ fd.id }}/analyze" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-chart-bar me-1"></i>単年詳細分析
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% else %}
+<div class="alert alert-danger">
+  <i class="fas fa-exclamation-triangle me-2"></i>比較分析の生成に失敗しました。
+</div>
+{% endif %}
+{% endblock %}

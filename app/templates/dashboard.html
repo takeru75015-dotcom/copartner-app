@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}ダッシュボード{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="fw-bold mb-0"><i class="fas fa-users me-2" style="color:#1a237e;"></i>クライアント一覧</h4>
+  <button class="btn btn-primary" style="background:#1a237e;border-color:#1a237e;" data-bs-toggle="modal" data-bs-target="#addClientModal">
+    <i class="fas fa-plus me-1"></i> クライアント追加
+  </button>
+</div>
+
+{% if clients %}
+<div class="row g-3">
+  {% for cl in clients %}
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="fw-bold">{{ cl.name }}</h5>
+        <p class="text-muted small mb-2"><i class="fas fa-building me-1"></i>{{ cl.industry or '業種未設定' }}</p>
+        {% if cl.note %}<p class="small text-secondary">{{ cl.note }}</p>{% endif %}
+        <p class="small text-muted mb-0"><i class="fas fa-file-invoice me-1"></i>財務データ: {{ cl.financials|length }}件</p>
+      </div>
+      <div class="card-footer bg-transparent d-flex gap-2">
+        <a href="/clients/{{ cl.id }}" class="btn btn-primary btn-sm flex-grow-1" style="background:#1a237e;border-color:#1a237e;">
+          <i class="fas fa-chart-bar me-1"></i>詳細・分析
+        </a>
+        <form method="post" action="/clients/{{ cl.id }}/delete" onsubmit="return confirm('削除しますか？')">
+          <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash"></i></button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="fas fa-folder-open fa-3x mb-3 d-block"></i>
+  <p>まだクライアントが登録されていません。<br>「クライアント追加」から始めましょう。</p>
+</div>
+{% endif %}
+
+<div class="modal fade" id="addClientModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">クライアント追加</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form method="post" action="/clients/add">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">会社名 <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control" required placeholder="例: 株式会社サンプル">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">業種</label>
+            <select name="industry" class="form-select">
+              <option value="">選択してください</option>
+              <option>製造業</option><option>小売業</option><option>飲食業</option>
+              <option>IT・サービス業</option><option>建設業</option><option>不動産業</option>
+              <option>医療・福祉</option><option>卸売業</option><option>運輸業</option><option>その他</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">メモ</label>
+            <textarea name="note" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-primary" style="background:#1a237e;border-color:#1a237e;">追加する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

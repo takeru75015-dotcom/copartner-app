@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}抽出結果プレビュー - {{ client.name }}{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <a href="/clients/{{ client.id }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>クライアントに戻る</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h4 class="fw-bold mb-1">{{ client.name }} <span class="text-muted">— {{ fd.period }}</span></h4>
+    <div class="text-muted small"><i class="fas fa-eye me-1"></i>抽出結果プレビュー — 数字に違和感がないか確認してください</div>
+  </div>
+</div>
+
+{# 整合性警告 #}
+{% if warnings %}
+<div class="card mb-4" style="border: 2px solid #f59e0b; background: linear-gradient(135deg, #fff7ed, #fef3c7);">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3" style="color: #b45309;">
+      <i class="fas fa-exclamation-triangle me-2"></i>整合性チェック — {{ warnings|length }}件の違和感
+    </h6>
+    {% for w in warnings %}
+    <div class="mb-2 p-2 rounded" style="background: #fff; border-left: 4px solid {% if w.severity == 'high' %}#dc2626{% elif w.severity == 'medium' %}#f59e0b{% else %}#3b82f6{% endif %};">
+      <div class="small"><span class="badge bg-secondary me-1">{{ w.category }}</span><strong>{{ w.message }}</strong></div>
+      <div class="small text-muted mt-1">👉 {{ w.suggestion }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="alert alert-success mb-4"><i class="fas fa-check-circle me-2"></i>整合性チェック OK — 数字に矛盾は見つかりませんでした</div>
+{% endif %}
+
+{# 主要数字テーブル #}
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="fas fa-chart-line me-2 text-primary"></i>P/L 損益計算書</h6>
+      <table class="table table-sm">
+        <tbody>
+          <tr><td>売上高</td><td class="text-end fw-bold">{{ "{:,.0f}".format(fd.revenue) }}万</td></tr>
+          <tr><td>売上原価</td><td class="text-end">{{ "{:,.0f}".format(fd.cost_of_sales) }}万</td></tr>
+          <tr><td>売上総利益（粗利）</td><td class="text-end fw-bold">{{ "{:,.0f}".format(fd.gross_profit) }}万 <span class="small text-muted">({{ "%.1f"|format(fd.gross_profit / fd.revenue * 100 if fd.revenue else 0) }}%)</span></td></tr>
+          <tr><td>販売管理費</td><td class="text-end">{{ "{:,.0f}".format(fd.selling_expenses) }}万</td></tr>
+          <tr><td>営業利益</td><td class="text-end fw-bold">{{ "{:+,.0f}".format(fd.operating_profit) }}万 <span class="small text-muted">({{ "%.1f"|format(fd.operating_profit / fd.revenue * 100 if fd.revenue else 0) }}%)</span></td></tr>
+          <tr><td>経常利益</td><td class="text-end">{{ "{:+,.0f}".format(fd.ordinary_profit) }}万</td></tr>
+          <tr><td>当期純利益</td><td class="text-end fw-bold">{{ "{:+,.0f}".format(fd.net_profit) }}万</td></tr>
+          {% if fd.prev_revenue %}<tr><td class="text-muted small">前期売上</td><td class="text-end text-muted">{{ "{:,.0f}".format(fd.prev_revenue) }}万</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2 text-primary"></i>B/S 貸借対照表</h6>
+      {% if fd.total_assets %}
+      <table class="table table-sm">
+        <tbody>
+          <tr><td>総資産</td><td class="text-end fw-bold">{{ "{:,.0f}".format(fd.total_assets) }}万</td></tr>
+          <tr><td>流動資産</td><td class="text-end">{{ "{:,.0f}".format(fd.current_assets) }}万</td></tr>
+          <tr><td>　現金及び預金</td><td class="text-end">{{ "{:,.0f}".format(fd.cash) }}万</td></tr>
+          <tr><td>　売掛金（受取手形含む）</td><td class="text-end">{{ "{:,.0f}".format(fd.receivables) }}万</td></tr>
+          <tr><td>　棚卸資産</td><td class="text-end">{{ "{:,.0f}".format(fd.inventory) }}万</td></tr>
+          <tr><td>負債合計</td><td class="text-end">{{ "{:,.0f}".format(fd.total_liabilities) }}万</td></tr>
+          <tr><td>　流動負債</td><td class="text-end">{{ "{:,.0f}".format(fd.current_liabilities) }}万</td></tr>
+          <tr><td>　有利子負債</td><td class="text-end">{{ "{:,.0f}".format(fd.interest_bearing_debt) }}万</td></tr>
+          <tr><td>純資産</td><td class="text-end fw-bold">{{ "{:,.0f}".format(fd.equity) }}万</td></tr>
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-muted small">B/S データなし。決算書PDFに貸借対照表が含まれているか確認してください。</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# 内訳プレビュー（抜粋） #}
+{% set ca = breakdown.current_assets_detail or {} %}
+{% set se = breakdown.selling_expenses_detail or {} %}
+{% if ca or se %}
+<div class="row g-4 mb-4">
+  {% if ca %}
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-2"><i class="fas fa-list me-2 text-info"></i>流動資産の内訳（抽出済み）</h6>
+      <table class="table table-sm small">
+        {% for k, v in ca.items() %}{% if not k.startswith('__') and v is number and v != 0 %}
+        <tr><td>{{ k }}</td><td class="text-end">{{ "{:,.0f}".format(v) }}万</td></tr>
+        {% endif %}{% endfor %}
+      </table>
+    </div>
+  </div>
+  {% endif %}
+  {% if se %}
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-2"><i class="fas fa-list me-2 text-warning"></i>販管費の内訳（抽出済み・上位）</h6>
+      <table class="table table-sm small">
+        {% set se_sorted = [] %}
+        {% for k, v in se.items() %}{% if not k.startswith('__') and v is number and v != 0 %}{% set _ = se_sorted.append((k, v)) %}{% endif %}{% endfor %}
+        {% for k, v in (se_sorted|sort(attribute=1, reverse=true))[:8] %}
+        <tr><td>{{ k }}</td><td class="text-end">{{ "{:,.0f}".format(v) }}万</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# アクションボタン #}
+<div class="card mb-4" style="background: #f1f5ff;">
+  <div class="card-body text-center py-4">
+    <h6 class="fw-bold mb-3">この内容で進めますか？</h6>
+    <div class="d-flex gap-2 justify-content-center flex-wrap">
+      <a href="/financials/{{ fd.id }}/analyze" class="btn btn-primary btn-lg" style="background: #1a237e; border-color: #1a237e;">
+        <i class="fas fa-check me-1"></i>このままAI分析へ
+      </a>
+      <a href="/financials/{{ fd.id }}/edit" class="btn btn-outline-warning btn-lg">
+        <i class="fas fa-edit me-1"></i>数字を修正する
+      </a>
+      <form method="post" action="/clients/{{ client.id }}/recalc-from-breakdown" class="d-inline" onsubmit="return confirm('内訳から在庫・売掛・現金を再計算します。');">
+        <button type="submit" class="btn btn-outline-info btn-lg">
+          <i class="fas fa-calculator me-1"></i>内訳から再計算
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

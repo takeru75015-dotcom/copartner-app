@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}財務データ編集 - {{ client.name }}{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <a href="/financials/{{ fd.id }}/preview" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>プレビューに戻る</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h4 class="fw-bold mb-1">{{ client.name }} <span class="text-muted">— {{ fd.period }}</span></h4>
+    <div class="text-muted small"><i class="fas fa-edit me-1"></i>財務データの編集（万円単位）</div>
+  </div>
+</div>
+
+<form method="post" action="/financials/{{ fd.id }}/edit">
+  <div class="card mb-3">
+    <div class="card-header fw-bold" style="background:#f1f5ff;"><i class="fas fa-info-circle me-2"></i>基本情報</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold">対象期間</label>
+          <input type="text" name="period" class="form-control" value="{{ fd.period }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold">従業員数（人）</label>
+          <input type="number" name="employees" class="form-control" value="{{ fd.employees or 0 }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header fw-bold" style="background:#f1f5ff;"><i class="fas fa-chart-line me-2"></i>P/L 損益計算書（万円）</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3"><label class="form-label small fw-semibold">売上高</label><input type="number" name="revenue" class="form-control" step="0.1" value="{{ fd.revenue or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">売上原価</label><input type="number" name="cost_of_sales" class="form-control" step="0.1" value="{{ fd.cost_of_sales or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">売上総利益（粗利）</label><input type="number" name="gross_profit" class="form-control" step="0.1" value="{{ fd.gross_profit or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">販売管理費</label><input type="number" name="selling_expenses" class="form-control" step="0.1" value="{{ fd.selling_expenses or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">営業利益</label><input type="number" name="operating_profit" class="form-control" step="0.1" value="{{ fd.operating_profit or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">経常利益</label><input type="number" name="ordinary_profit" class="form-control" step="0.1" value="{{ fd.ordinary_profit or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">当期純利益</label><input type="number" name="net_profit" class="form-control" step="0.1" value="{{ fd.net_profit or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold text-muted">前期売上</label><input type="number" name="prev_revenue" class="form-control" step="0.1" value="{{ fd.prev_revenue or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold text-muted">前期営業利益</label><input type="number" name="prev_operating_profit" class="form-control" step="0.1" value="{{ fd.prev_operating_profit or 0 }}"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header fw-bold" style="background:#f1f5ff;"><i class="fas fa-balance-scale me-2"></i>B/S 貸借対照表（万円）</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3"><label class="form-label small fw-semibold">総資産</label><input type="number" name="total_assets" class="form-control" step="0.1" value="{{ fd.total_assets or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">流動資産</label><input type="number" name="current_assets" class="form-control" step="0.1" value="{{ fd.current_assets or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">現金及び預金</label><input type="number" name="cash" class="form-control" step="0.1" value="{{ fd.cash or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">売掛金（手形含む）</label><input type="number" name="receivables" class="form-control" step="0.1" value="{{ fd.receivables or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">棚卸資産（合計）</label><input type="number" name="inventory" class="form-control" step="0.1" value="{{ fd.inventory or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">負債合計</label><input type="number" name="total_liabilities" class="form-control" step="0.1" value="{{ fd.total_liabilities or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">流動負債</label><input type="number" name="current_liabilities" class="form-control" step="0.1" value="{{ fd.current_liabilities or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">有利子負債</label><input type="number" name="interest_bearing_debt" class="form-control" step="0.1" value="{{ fd.interest_bearing_debt or 0 }}"></div>
+        <div class="col-md-3"><label class="form-label small fw-semibold">純資産</label><input type="number" name="equity" class="form-control" step="0.1" value="{{ fd.equity or 0 }}"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body text-center">
+      <button type="submit" class="btn btn-primary btn-lg" style="background:#1a237e;border-color:#1a237e;">
+        <i class="fas fa-save me-1"></i>保存してプレビューに戻る
+      </button>
+      <a href="/financials/{{ fd.id }}/preview" class="btn btn-outline-secondary btn-lg ms-2">
+        <i class="fas fa-times me-1"></i>キャンセル
+      </a>
+      <div class="small text-muted mt-2">保存後、既存のAI分析結果は破棄されます（次回アクセス時に再生成）</div>
+    </div>
+  </div>
+</form>
+{% endblock %}

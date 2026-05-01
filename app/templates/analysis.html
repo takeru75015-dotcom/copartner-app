@@ -1,0 +1,1134 @@
+{% extends 'base.html' %}
+{% block title %}AI分析結果 - {{ client.name }}{% endblock %}
+
+{% block head %}
+<style>
+  /* ========== 表示モード切替 ========== */
+  .mode-switch { display: flex; gap: 4px; background: #f3f4f6; padding: 4px; border-radius: 99px; margin-left: auto; }
+  .mode-switch button { border: none; background: transparent; padding: 6px 16px; border-radius: 99px; font-size: .8rem; font-weight: 700; cursor: pointer; color: #6b7280; transition: all .15s; }
+  .mode-switch button.active { background: #1a237e; color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.15); }
+  body.mode-simple .pro-only { display: none !important; }
+
+  /* ========== タブ ========== */
+  .cp-tabs { border-bottom: 2px solid #e5e7eb; display: flex; gap: 0; margin-bottom: 24px; }
+  .cp-tab { padding: 12px 24px; font-weight: 600; color: #6b7280; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; user-select: none; }
+  .cp-tab:hover { color: #f59e0b; }
+  .cp-tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+  .cp-tab-panel { display: none; }
+  .cp-tab-panel.active { display: block; animation: fadeIn .2s; }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+  /* ========== Key Insight（最重要ポイント） ========== */
+  .key-insight { background: linear-gradient(135deg, #fff7ed, #ffedd5); border: 2px solid #fb923c; border-radius: 12px; padding: 18px 22px; margin-bottom: 24px; }
+  .key-insight-label { font-size: .75rem; color: #c2410c; font-weight: 700; letter-spacing: .1em; margin-bottom: 6px; }
+  .key-insight-text { font-size: 1.05rem; color: #7c2d12; font-weight: 600; line-height: 1.6; }
+
+  /* ========== データ制約 ========== */
+  .data-limit { background: #fffbeb; border-left: 4px solid #fbbf24; padding: 10px 14px; margin-bottom: 16px; border-radius: 4px; font-size: .85rem; color: #78350f; }
+
+  /* ========== KPIカード ========== */
+  .metric-card { background: #fff; border-radius: 10px; padding: 16px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.06); border-top: 3px solid var(--c, #3b82f6); height: 100%; }
+  .metric-card .metric-label { font-size: .75rem; color: #6b7280; font-weight: 600; letter-spacing: .03em; }
+  .metric-card .metric-value { font-size: 1.55rem; font-weight: 700; color: #111827; margin-top: 2px; line-height: 1.1; }
+  .metric-card .metric-delta { font-size: .8rem; font-weight: 600; margin-top: 6px; }
+  .metric-delta.up   { color: #16a34a; }
+  .metric-delta.down { color: #dc2626; }
+  .metric-card .metric-sub { font-size: .7rem; color: #9ca3af; margin-top: 4px; }
+  .c-blue   { --c: #3b82f6; } .c-green  { --c: #22c55e; } .c-orange { --c: #f59e0b; }
+  .c-purple { --c: #a855f7; } .c-red    { --c: #ef4444; } .c-teal   { --c: #14b8a6; }
+
+  /* ========== バーンレートカード ========== */
+  .burn-card { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-radius: 12px; padding: 16px 18px; border: 1px solid #fecaca; }
+  .burn-card.ok { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-color: #bbf7d0; }
+  .burn-card .burn-label { font-size: .75rem; color: #991b1b; font-weight: 700; }
+  .burn-card.ok .burn-label { color: #15803d; }
+  .burn-card .burn-value { font-size: 1.6rem; font-weight: 800; color: #7f1d1d; }
+  .burn-card.ok .burn-value { color: #14532d; }
+  .burn-card .burn-sub { font-size: .7rem; color: #b91c1c; margin-top: 2px; }
+  .burn-card.ok .burn-sub { color: #166534; }
+
+  /* ========== ベンチマーク比較カード（シンプル版） ========== */
+  .bench-card { background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); margin-bottom: 10px; border-left: 5px solid var(--rc, #9ca3af); }
+  .bench-card.rank-top25 { --rc: #22c55e; }
+  .bench-card.rank-above_median { --rc: #3b82f6; }
+  .bench-card.rank-below_median { --rc: #f59e0b; }
+  .bench-card.rank-bottom { --rc: #ef4444; }
+  .bench-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
+  .bench-card-title { font-size: .92rem; color: #111827; font-weight: 700; }
+  .bench-card-title .term-note { font-size: .72rem; color: #6b7280; font-weight: 400; margin-left: 4px; }
+  .bench-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: stretch; }
+  .bench-num { background: #f9fafb; padding: 10px 8px; border-radius: 6px; text-align: center; }
+  .bench-num.self { background: var(--sbg, #f0fdf4); border: 2px solid var(--rc, #22c55e); }
+  .bench-card.rank-top25 .bench-num.self { --sbg: #dcfce7; }
+  .bench-card.rank-above_median .bench-num.self { --sbg: #dbeafe; }
+  .bench-card.rank-below_median .bench-num.self { --sbg: #fef3c7; }
+  .bench-card.rank-bottom .bench-num.self { --sbg: #fee2e2; }
+  .bench-num .label { font-size: .65rem; color: #6b7280; font-weight: 600; margin-bottom: 2px; text-transform: uppercase; letter-spacing: .04em; }
+  .bench-num .val { font-size: 1.1rem; font-weight: 700; color: #111827; }
+  .bench-num.self .val { font-size: 1.3rem; }
+  .bench-comment { margin-top: 10px; font-size: .78rem; color: #4b5563; padding: 6px 10px; background: #f9fafb; border-radius: 4px; }
+  .rank-top25 { background: #dcfce7; color: #15803d; }
+  .rank-above_median { background: #dbeafe; color: #1d4ed8; }
+  .rank-below_median { background: #fef3c7; color: #b45309; }
+  .rank-bottom { background: #fee2e2; color: #b91c1c; }
+  .rank-badge { font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+
+  /* ========== アクション・アイデアカード ========== */
+  .action-card { border-left: 5px solid var(--pc, #3b82f6); background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.04); margin-bottom: 14px; }
+  .action-card.prio-high, .action-card.urg-急務 { --pc: #ef4444; }
+  .action-card.prio-mid,  .action-card.urg-重要 { --pc: #f59e0b; }
+  .action-card.prio-low,  .action-card.urg-推奨 { --pc: #22c55e; }
+  .action-title { font-size: 1.05rem; font-weight: 700; color: #111827; margin-bottom: 6px; }
+  .action-detail { color: #374151; font-size: .9rem; margin-bottom: 10px; }
+  .action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 8px; }
+  .action-grid .item { background: #f9fafb; padding: 8px 10px; border-radius: 6px; font-size: .8rem; }
+  .action-grid .item .ilabel { font-size: .65rem; color: #6b7280; font-weight: 600; margin-bottom: 2px; }
+  .action-grid .item .ival { color: #111827; font-weight: 600; line-height: 1.3; }
+  .impact-pill { display: inline-block; background: #fef3c7; color: #b45309; padding: 4px 12px; border-radius: 99px; font-size: .8rem; font-weight: 700; margin-bottom: 8px; }
+  .urgency-badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: .72rem; font-weight: 700; margin-left: 8px; }
+  .urg-急務-badge { background: #fee2e2; color: #b91c1c; }
+  .urg-重要-badge { background: #fef3c7; color: #b45309; }
+  .urg-推奨-badge { background: #dcfce7; color: #15803d; }
+
+  /* ========== 売上アイデアカード ========== */
+  .idea-card { background: #fff; border: 1px solid #fed7aa; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+  .idea-card .idea-title { font-size: 1rem; font-weight: 700; color: #9a3412; }
+  .idea-tf { display: inline-block; background: #ffedd5; color: #c2410c; padding: 2px 10px; border-radius: 99px; font-size: .7rem; font-weight: 700; margin-left: 8px; }
+  .idea-impact { color: #ea580c; font-weight: 700; font-size: .85rem; margin-top: 4px; }
+  .cost-card { background: #fff; border: 1px solid #fecaca; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+  .cost-card .cost-title { font-size: 1rem; font-weight: 700; color: #991b1b; }
+  .cost-savings { color: #dc2626; font-weight: 700; font-size: .85rem; margin-top: 4px; }
+
+  /* ========== 統合再生プラン ========== */
+  .turnaround-box { background: #fff; border: 2px solid #312e81; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+  .turnaround-story { background: linear-gradient(135deg, #eef2ff, #e0e7ff); border-left: 4px solid #4338ca; padding: 14px 16px; border-radius: 6px; font-size: .95rem; color: #312e81; line-height: 1.7; margin-bottom: 16px; }
+  .turnaround-axis { margin-bottom: 14px; }
+  .turnaround-axis h6 { color: #4338ca; font-weight: 700; border-bottom: 1px solid #c7d2fe; padding-bottom: 4px; }
+
+  /* ========== クロスセル ========== */
+  .cross-sell-card { background: linear-gradient(135deg, #fef9ff, #eef2ff); border: 1px solid #c7d2fe; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+  .cross-title { font-size: 1rem; font-weight: 700; color: #312e81; margin-bottom: 4px; }
+  .cross-category { display: inline-block; background: #312e81; color: #fff; padding: 2px 10px; border-radius: 99px; font-size: .7rem; margin-bottom: 8px; }
+  .cross-price { color: #4338ca; font-weight: 700; font-size: .9rem; }
+  .cross-script { background: #fff; padding: 10px 12px; border-radius: 6px; font-size: .85rem; color: #4338ca; margin-top: 8px; border-left: 3px solid #6366f1; }
+
+  /* ========== ヒアリングシート（カテゴリ別） ========== */
+  .hearing-cat { background: #fff; border: 1px solid #fbbf24; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+  .hearing-cat h6 { color: #b45309; font-weight: 700; border-bottom: 1px solid #fde68a; padding-bottom: 6px; margin-bottom: 10px; }
+  .hearing-q { padding: 6px 0; border-bottom: 1px dashed #fef3c7; font-size: .88rem; color: #374151; }
+  .hearing-q:last-child { border-bottom: none; }
+
+  /* ========== 用語ツールチップ ========== */
+  .term { border-bottom: 1px dotted #6b7280; cursor: help; }
+
+  /* ========== 運転資本インジケーター ========== */
+  .wc-indicator { display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: .75rem; font-weight: 700; }
+  .wc-good { background: #dcfce7; color: #15803d; }
+  .wc-ok   { background: #fef3c7; color: #b45309; }
+  .wc-bad  { background: #fee2e2; color: #b91c1c; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3 d-flex gap-2">
+  <a href="/clients/{{ client.id }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>クライアントに戻る</a>
+  {% if cached and analysis_id %}
+  <form method="post" action="/financials/{{ fd.id }}/reanalyze" class="d-inline">
+    <button type="submit" class="btn btn-outline-warning btn-sm"><i class="fas fa-redo me-1"></i>再分析</button>
+  </form>
+  {% endif %}
+  <div class="mode-switch ms-auto" id="modeSwitch">
+    <button data-mode="simple" class="active">👤 社長向け</button>
+    <button data-mode="pro">🧑‍💼 プロ向け</button>
+  </div>
+  <span class="small text-muted align-self-center ms-2"><i class="fas fa-robot me-1"></i>Claude</span>
+</div>
+
+<div class="card p-3 mb-4">
+  <h4 class="fw-bold mb-1">{{ client.name }} <span class="text-muted small">— {{ fd.period }}</span></h4>
+  <div class="d-flex gap-3 align-items-center flex-wrap">
+    <span class="text-muted small"><i class="fas fa-building me-1"></i>{{ client.industry or '業種未登録' }}</span>
+    {% if client.business_details %}
+    <span class="text-muted small"><i class="fas fa-info-circle me-1"></i>{{ client.business_details[:80] }}</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+  <i class="fas fa-exclamation-triangle me-2"></i>分析中にエラーが発生しました。<br>
+  <small class="d-block mt-1">{{ error }}</small>
+</div>
+
+{% elif result %}
+
+{# ========== Key Insight（最重要ポイント） ========== #}
+{% if result.key_insight %}
+<div class="key-insight">
+  <div class="key-insight-label">💡 最重要ポイント</div>
+  <div class="key-insight-text">{{ result.key_insight }}</div>
+</div>
+{% endif %}
+
+{# ========== データ制約 ========== #}
+{% if result.data_limitations %}
+{% for limit in result.data_limitations %}
+<div class="data-limit"><i class="fas fa-info-circle me-1"></i>{{ limit }}</div>
+{% endfor %}
+{% endif %}
+
+{# ========== タブ切替 ========== #}
+<div class="cp-tabs" id="cpTabs">
+  <div class="cp-tab active" data-tab="overview">📋 財務概要</div>
+  <div class="cp-tab" data-tab="cash">🔥 キャッシュ診断</div>
+  <div class="cp-tab" data-tab="advice">💡 ビジネスアドバイス</div>
+  <div class="cp-tab" data-tab="simulator">🎚️ シミュレーター</div>
+</div>
+
+{# ========== タブ1：財務概要 ========== #}
+<div class="cp-tab-panel active" id="panel-overview">
+
+  {# ヒアリング質問（業種判定要確認） #}
+  {% if result.industry_confidence == 'low' and result.hearing_sheet %}
+  <div class="alert alert-warning mb-4" style="background: linear-gradient(135deg, #fff7ed, #fef3c7); border-color: #f59e0b;">
+    <div class="fw-bold mb-2" style="color:#b45309;"><i class="fas fa-hand-paper me-2"></i>業種判定: 要確認 — 以下を社長に確認すると分析精度が大幅UP</div>
+    <a href="/clients/{{ client.id }}" class="btn btn-sm btn-warning"><i class="fas fa-edit me-1"></i>事業構成を追記して再分析</a>
+  </div>
+  {% endif %}
+
+  {# KPIカード #}
+  <h6 class="fw-bold text-muted small mb-2 mt-2"><i class="fas fa-chart-bar me-1"></i>KPI サマリー</h6>
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="metric-card c-blue">
+        <div class="metric-label">売上高</div>
+        <div class="metric-value">{{ "{:,.0f}".format(fd.revenue) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if fd.prev_revenue and fd.prev_revenue > 0 %}
+          {% set growth = (fd.revenue - fd.prev_revenue) / fd.prev_revenue * 100 %}
+          <div class="metric-delta {% if growth >= 0 %}up{% else %}down{% endif %}">
+            <i class="fas fa-{% if growth >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(growth) }}%
+          </div>
+        {% else %}<div class="metric-sub">前期データなし</div>{% endif %}
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric-card c-green">
+        <div class="metric-label">粗利</div>
+        <div class="metric-value">{{ "{:,.0f}".format(fd.gross_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if result.growth_rates and result.growth_rates.gross_profit is not none %}
+          {% set g = result.growth_rates.gross_profit %}
+          <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
+            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
+          </div>
+        {% endif %}
+        <div class="metric-sub"><abbr class="term" title="売上から仕入れ（原価）を引いた利益の割合">粗利率</abbr> {% if fd.revenue > 0 %}{{ "%.1f"|format(fd.gross_profit / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric-card c-orange">
+        <div class="metric-label">営業利益</div>
+        <div class="metric-value">{{ "{:,.0f}".format(fd.operating_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if result.growth_rates and result.growth_rates.operating_profit is not none %}
+          {% set g = result.growth_rates.operating_profit %}
+          <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
+            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
+          </div>
+        {% endif %}
+        <div class="metric-sub"><abbr class="term" title="本業で得た利益の売上に対する割合">営業利益率</abbr> {% if fd.revenue > 0 %}{{ "%.1f"|format(fd.operating_profit / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="metric-card c-purple">
+        <div class="metric-label">当期純利益</div>
+        <div class="metric-value">{{ "{:,.0f}".format(fd.net_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if result.growth_rates and result.growth_rates.net_profit is not none %}
+          {% set g = result.growth_rates.net_profit %}
+          <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
+            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
+          </div>
+        {% else %}
+          <div class="metric-sub">税金控除後の最終利益</div>
+        {% endif %}
+      </div>
+    </div>
+    {% if fd.total_assets > 0 %}
+    <div class="col-6 col-md-3"><div class="metric-card c-teal">
+      <div class="metric-label">総資産</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.total_assets) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if result.growth_rates and result.growth_rates.total_assets is not none %}
+        {% set g = result.growth_rates.total_assets %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      {% else %}<div class="metric-sub">会社の資産合計</div>{% endif %}
+    </div></div>
+    {% endif %}
+    {% if fd.equity > 0 and fd.total_assets > 0 %}
+    <div class="col-6 col-md-3"><div class="metric-card c-blue">
+      <div class="metric-label"><abbr class="term" title="総資産のうち、借入に頼らない自己資本の割合">自己資本比率</abbr></div>
+      <div class="metric-value">{{ "%.1f"|format(fd.equity / fd.total_assets * 100) }}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
+      {% if result.growth_rates and result.growth_rates.equity is not none %}
+        {% set g = result.growth_rates.equity %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 純資産 前期比 {{ "%+.1f"|format(g) }}%</div>
+      {% else %}<div class="metric-sub">純資産 {{ "{:,.0f}".format(fd.equity) }}万円</div>{% endif %}
+    </div></div>
+    {% endif %}
+    {% if fd.current_liabilities > 0 and fd.current_assets > 0 %}
+    <div class="col-6 col-md-3"><div class="metric-card c-green"><div class="metric-label"><abbr class="term" title="1年以内の短期負債に対する流動資産の割合">流動比率</abbr></div><div class="metric-value">{{ "%.1f"|format(fd.current_assets / fd.current_liabilities * 100) }}<span style="font-size:.7em;color:#9ca3af;">%</span></div><div class="metric-sub">1年以内の支払い余力</div></div></div>
+    {% endif %}
+    {% if fd.interest_bearing_debt > 0 %}
+    <div class="col-6 col-md-3"><div class="metric-card c-red">
+      <div class="metric-label">有利子負債</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.interest_bearing_debt) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if result.growth_rates and result.growth_rates.interest_bearing_debt is not none %}
+        {% set g = result.growth_rates.interest_bearing_debt %}
+        {# 借入が増えるのは原則 down 表記（赤）。減るのは up 表記（緑） #}
+        <div class="metric-delta {% if g <= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g <= 0 %}arrow-down{% else %}arrow-up{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      {% else %}<div class="metric-sub">金利が発生する借入</div>{% endif %}
+    </div></div>
+    {% endif %}
+  </div>
+
+  {# 総合スコア #}
+  <div class="row g-4 mb-4">
+    <div class="col-md-4">
+      <div class="card text-center p-3 h-100">
+        {% set score = result.score %}
+        {% set color = result.score_color or ('#22c55e' if score >= 80 else '#3b82f6' if score >= 60 else '#f59e0b' if score >= 40 else '#ef4444') %}
+        <div class="score-circle mx-auto mb-3" style="background:{{ color }};">{{ score }}</div>
+        <div class="fw-bold fs-5" style="color:{{ color }};">{{ result.score_label }}</div>
+        <div class="text-muted small">財務健全性スコア</div>
+        {% if result.score_breakdown %}
+        <div class="mt-3 small text-muted text-start" style="font-size:.75rem;">
+          <div class="d-flex justify-content-between"><span>収益性</span><span class="fw-bold">{{ result.score_breakdown.profitability }}/25</span></div>
+          <div class="d-flex justify-content-between"><span>安全性</span><span class="fw-bold">{{ result.score_breakdown.safety }}/25</span></div>
+          <div class="d-flex justify-content-between"><span>効率性</span><span class="fw-bold">{{ result.score_breakdown.efficiency }}/25</span></div>
+          <div class="d-flex justify-content-between"><span>成長性</span><span class="fw-bold">{{ result.score_breakdown.growth }}/25</span></div>
+        </div>
+        {% endif %}
+        {% if result.score_penalties %}
+        <div class="mt-3 small text-start" style="font-size:.7rem; background:#fef3c7; padding:6px 8px; border-radius:6px; border-left:3px solid #f59e0b;">
+          <div class="fw-bold mb-1" style="color:#b45309;">⚠️ 適用ペナルティ</div>
+          {% for p in result.score_penalties %}
+          <div style="color:#78350f;">• {{ p }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-8"><div class="card p-3 h-100"><h6 class="fw-bold text-muted mb-2"><i class="fas fa-file-alt me-1"></i>総合評価</h6><p class="mb-0" style="white-space: pre-wrap;">{{ result.summary }}</p></div></div>
+  </div>
+
+  {# 時系列トレンド（複数年データがある時だけ表示） #}
+  {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+  <div class="card p-3 mb-4">
+    <h6 class="fw-bold mb-3"><i class="fas fa-chart-line me-2 text-primary"></i>時系列トレンド <span class="small text-muted">（{{ result.trend_metrics.periods|length }}期比較）</span></h6>
+    <div class="row g-3">
+      {# 売上 & 営業利益 #}
+      <div class="col-md-6"><canvas id="trendRevProfit" style="max-height: 240px;"></canvas></div>
+      {# 粗利率（単独） #}
+      <div class="col-md-6"><canvas id="trendGrossMargin" style="max-height: 240px;"></canvas></div>
+      {# 売掛回収月数（単独・常時表示） #}
+      {% set inv_list = result.trend_metrics.inventory_months or [] %}
+      {% set inv_max = inv_list|max if inv_list else 0 %}
+      {% set has_inv = inv_max > 0 %}
+      <div class="col-md-{% if has_inv %}6{% else %}12{% endif %}">
+        <canvas id="trendRecMonths" style="max-height: 240px;"></canvas>
+      </div>
+      {# 在庫月数（在庫があるときだけ表示） #}
+      {% if has_inv %}
+      <div class="col-md-6"><canvas id="trendInvMonths" style="max-height: 240px;"></canvas></div>
+      {% endif %}
+    </div>
+    <div class="small text-muted mt-2">
+      💡 <strong>月数の見方</strong>：
+      売掛 1ヶ月分=月商と同額、2ヶ月分=2ヶ月分溜まってる。
+      一般に売掛は<strong>1.5ヶ月以下</strong>が健全{% if has_inv %}、在庫は<strong>1ヶ月以下</strong>が健全{% endif %}。急に増えていたら要警戒。
+    </div>
+  </div>
+  {% endif %}
+
+  {# 販管費・売上内訳 #}
+  {% set se_detail = (breakdown.selling_expenses_detail or {}) if breakdown else {} %}
+  {% set se_items = [] %}
+  {% for k, v in se_detail.items() %}{% if not k.startswith('__') and (v is number) and v != 0 %}{% set _ = se_items.append((k, v)) %}{% endif %}{% endfor %}
+  {% set se_items = se_items|sort(attribute=1, reverse=true) %}
+  {% set rev_detail = (breakdown.revenue_detail or {}) if breakdown else {} %}
+  {% set rev_items = [] %}
+  {% for k, v in rev_detail.items() %}{% if not k.startswith('__') and (v is number) and v != 0 %}{% set _ = rev_items.append((k, v)) %}{% endif %}{% endfor %}
+  {% set rev_items = rev_items|sort(attribute=1, reverse=true) %}
+
+  {# 流動資産・流動負債・固定負債 の内訳抽出 #}
+  {% set ca_detail = (breakdown.current_assets_detail or {}) if breakdown else {} %}
+  {% set ca_items = [] %}
+  {% for k, v in ca_detail.items() %}{% if not k.startswith('__') and (v is number) and v != 0 %}{% set _ = ca_items.append((k, v)) %}{% endif %}{% endfor %}
+  {% set ca_items = ca_items|sort(attribute=1, reverse=true) %}
+
+  {% set cl_detail = (breakdown.current_liabilities_detail or {}) if breakdown else {} %}
+  {% set cl_items = [] %}
+  {% for k, v in cl_detail.items() %}{% if not k.startswith('__') and (v is number) and v != 0 %}{% set _ = cl_items.append((k, v)) %}{% endif %}{% endfor %}
+  {% set cl_items = cl_items|sort(attribute=1, reverse=true) %}
+
+  {% set fl_detail = (breakdown.fixed_liabilities_detail or {}) if breakdown else {} %}
+  {% set fl_items = [] %}
+  {% for k, v in fl_detail.items() %}{% if not k.startswith('__') and (v is number) and v != 0 %}{% set _ = fl_items.append((k, v)) %}{% endif %}{% endfor %}
+  {% set fl_items = fl_items|sort(attribute=1, reverse=true) %}
+
+  {% if se_items or rev_items %}
+  <div class="row g-4 mb-4">
+    {% if se_items %}
+    <div class="col-md-{% if rev_items %}6{% else %}12{% endif %}">
+      <div class="card p-3 h-100">
+        <h6 class="fw-bold mb-3"><i class="fas fa-chart-pie me-2 text-warning"></i>販管費の内訳 <span class="small text-muted">（{{ se_items|length }}項目）</span></h6>
+        <div class="row g-3">
+          <div class="col-md-5"><canvas id="chartSE" style="max-height: 240px;"></canvas></div>
+          <div class="col-md-7"><table class="table table-sm mb-0 small"><thead><tr class="text-muted small"><th>項目</th><th class="text-end">金額(万円)</th><th class="text-end">売上比</th></tr></thead><tbody>
+            {% set se_total = se_items|sum(attribute=1) %}
+            {% for name, amount in se_items %}<tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{% if fd.revenue > 0 %}{{ "%.1f"|format(amount / fd.revenue * 100) }}%{% else %}—{% endif %}</td></tr>{% endfor %}
+            <tr class="border-top fw-bold"><td>合計</td><td class="text-end">{{ "{:,.0f}".format(se_total) }}</td><td class="text-end text-muted">{% if fd.revenue > 0 %}{{ "%.1f"|format(se_total / fd.revenue * 100) }}%{% else %}—{% endif %}</td></tr>
+          </tbody></table></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% if rev_items %}
+    <div class="col-md-{% if se_items %}6{% else %}12{% endif %}">
+      <div class="card p-3 h-100">
+        <h6 class="fw-bold mb-3"><i class="fas fa-chart-pie me-2 text-success"></i>売上の内訳</h6>
+        <div class="row g-3">
+          <div class="col-md-5"><canvas id="chartRev" style="max-height: 240px;"></canvas></div>
+          <div class="col-md-7"><table class="table table-sm mb-0 small"><thead><tr class="text-muted small"><th>セグメント</th><th class="text-end">金額(万円)</th><th class="text-end">構成比</th></tr></thead><tbody>
+            {% set rev_total = rev_items|sum(attribute=1) %}
+            {% for name, amount in rev_items %}<tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{% if rev_total > 0 %}{{ "%.1f"|format(amount / rev_total * 100) }}%{% else %}—{% endif %}</td></tr>{% endfor %}
+            <tr class="border-top fw-bold"><td>合計</td><td class="text-end">{{ "{:,.0f}".format(rev_total) }}</td><td class="text-end text-muted">100.0%</td></tr>
+          </tbody></table></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# 流動資産・流動負債の内訳（B/Sの中身が見える化） #}
+  {% if ca_items or cl_items %}
+  <div class="row g-4 mb-4">
+    {% if ca_items %}
+    <div class="col-md-{% if cl_items %}6{% else %}12{% endif %}">
+      <div class="card p-3 h-100">
+        <h6 class="fw-bold mb-3"><i class="fas fa-coins me-2 text-success"></i>流動資産の内訳 <span class="small text-muted">（{{ ca_items|length }}項目）</span></h6>
+        <div class="row g-3">
+          <div class="col-md-5"><canvas id="chartCA" style="max-height: 240px;"></canvas></div>
+          <div class="col-md-7">
+            <table class="table table-sm mb-0 small">
+              <thead><tr class="text-muted small"><th>項目</th><th class="text-end">金額(万円)</th><th class="text-end">構成比</th></tr></thead>
+              <tbody>
+                {% set ca_total = ca_items|sum(attribute=1) %}
+                {% for name, amount in ca_items %}
+                <tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{{ "%.1f"|format(amount / ca_total * 100) if ca_total > 0 else '—' }}%</td></tr>
+                {% endfor %}
+                <tr class="border-top fw-bold"><td>内訳合計</td><td class="text-end">{{ "{:,.0f}".format(ca_total) }}</td><td class="text-end text-muted">100%</td></tr>
+                {% if fd.current_assets and fd.current_assets > 0 %}
+                  {% set gap = fd.current_assets - ca_total %}
+                  <tr class="small text-muted"><td>B/S 流動資産合計</td><td class="text-end">{{ "{:,.0f}".format(fd.current_assets) }}</td><td class="text-end">{% if gap|abs > fd.current_assets * 0.05 %}⚠️ 乖離{% else %}✓{% endif %}</td></tr>
+                  {% if gap|abs > fd.current_assets * 0.05 %}
+                  <tr class="small" style="color:#b45309;"><td colspan="3">⚠️ 内訳と合計で {{ "{:+,.0f}".format(gap) }}万円の乖離。未分類項目あり</td></tr>
+                  {% endif %}
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% if cl_items %}
+    <div class="col-md-{% if ca_items %}6{% else %}12{% endif %}">
+      <div class="card p-3 h-100">
+        <h6 class="fw-bold mb-3"><i class="fas fa-file-invoice-dollar me-2 text-danger"></i>流動負債の内訳 <span class="small text-muted">（{{ cl_items|length }}項目）</span></h6>
+        <div class="row g-3">
+          <div class="col-md-5"><canvas id="chartCL" style="max-height: 240px;"></canvas></div>
+          <div class="col-md-7">
+            <table class="table table-sm mb-0 small">
+              <thead><tr class="text-muted small"><th>項目</th><th class="text-end">金額(万円)</th><th class="text-end">構成比</th></tr></thead>
+              <tbody>
+                {% set cl_total = cl_items|sum(attribute=1) %}
+                {% for name, amount in cl_items %}
+                <tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{{ "%.1f"|format(amount / cl_total * 100) if cl_total > 0 else '—' }}%</td></tr>
+                {% endfor %}
+                <tr class="border-top fw-bold"><td>内訳合計</td><td class="text-end">{{ "{:,.0f}".format(cl_total) }}</td><td class="text-end text-muted">100%</td></tr>
+                {% if fd.current_liabilities and fd.current_liabilities > 0 %}
+                  {% set gap = fd.current_liabilities - cl_total %}
+                  <tr class="small text-muted"><td>B/S 流動負債合計</td><td class="text-end">{{ "{:,.0f}".format(fd.current_liabilities) }}</td><td class="text-end">{% if gap|abs > fd.current_liabilities * 0.05 %}⚠️ 乖離{% else %}✓{% endif %}</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# 固定負債の内訳 #}
+  {% if fl_items %}
+  <div class="card p-3 mb-4 pro-only">
+    <h6 class="fw-bold mb-3"><i class="fas fa-university me-2 text-secondary"></i>固定負債の内訳（長期の借入・社債など）</h6>
+    <table class="table table-sm mb-0 small">
+      <thead><tr class="text-muted small"><th>項目</th><th class="text-end">金額(万円)</th><th class="text-end">構成比</th></tr></thead>
+      <tbody>
+        {% set fl_total = fl_items|sum(attribute=1) %}
+        {% for name, amount in fl_items %}
+        <tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{{ "%.1f"|format(amount / fl_total * 100) if fl_total > 0 else '—' }}%</td></tr>
+        {% endfor %}
+        <tr class="border-top fw-bold"><td>合計</td><td class="text-end">{{ "{:,.0f}".format(fl_total) }}</td><td class="text-end">100%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# 業界ベンチマーク — プロ向け #}
+  {% if result.benchmark and result.benchmark.comparisons %}
+  <div class="card p-3 mb-4 pro-only">
+    <h6 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2 text-primary"></i>業界ベンチマーク比較 — {{ result.benchmark.industry_name }}</h6>
+    {% for c in result.benchmark.comparisons %}
+    {# カード型：自社・中央値・上位25% を並べて色分け #}
+    {% set mparts = c.metric.split('（', 1) %}
+    {% set mmain = mparts[0] %}
+    {% set mnote = (mparts[1][:-1] if mparts|length > 1 and mparts[1].endswith('）') else (mparts[1] if mparts|length > 1 else '')) %}
+    <div class="bench-card rank-{{ c.rank }}">
+      <div class="bench-card-head">
+        <div class="bench-card-title">{{ mmain }}{% if mnote %}<span class="term-note">（{{ mnote }}）</span>{% endif %}</div>
+        <span class="rank-badge rank-{{ c.rank }}">
+          {% if c.rank == 'top25' %}✨ 上位25%
+          {% elif c.rank == 'above_median' %}⬆ 中央値超
+          {% elif c.rank == 'below_median' %}⬇ 中央値下
+          {% else %}⚠ 要改善{% endif %}
+        </span>
+      </div>
+      <div class="bench-nums">
+        <div class="bench-num self">
+          <div class="label">自社</div>
+          <div class="val">{{ c.self_value }}<span style="font-size:.7em;color:#6b7280;">{{ c.unit }}</span></div>
+        </div>
+        <div class="bench-num">
+          <div class="label">業界中央値</div>
+          <div class="val">{{ c.median }}<span style="font-size:.7em;color:#6b7280;">{{ c.unit }}</span></div>
+        </div>
+        <div class="bench-num">
+          <div class="label">業界上位25%</div>
+          <div class="val">{{ c.top25 }}<span style="font-size:.7em;color:#6b7280;">{{ c.unit }}</span></div>
+        </div>
+      </div>
+      <div class="bench-comment">{{ c.comment }}</div>
+    </div>
+    {% endfor %}
+    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>{{ result.benchmark.source_note }}</div>
+  </div>
+  {% endif %}
+
+  {# 強み・課題 #}
+  <div class="row g-4 mb-4">
+    <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-thumbs-up me-2 text-success"></i>強み</h6>{% for s in result.strengths %}<div class="strength-item">{{ s }}</div>{% endfor %}</div></div>
+    <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-exclamation-circle me-2 text-danger"></i>課題・リスク</h6>{% for issue in result.issues %}<div class="issue-item">{{ issue }}</div>{% endfor %}</div></div>
+  </div>
+</div>
+
+{# ========== タブ2：キャッシュ診断 ========== #}
+<div class="cp-tab-panel" id="panel-cash">
+
+  {# バーンレート #}
+  {% if cash_burn %}
+  <h6 class="fw-bold text-muted small mb-3 mt-2"><i class="fas fa-fire me-1 text-danger"></i>バーンレート — 毎月いくら燃えているか</h6>
+  <div class="row g-3 mb-4">
+    {% if cash_burn.operating_monthly is not none %}
+    <div class="col-md-4">
+      <div class="burn-card {% if cash_burn.operating_monthly >= 0 %}ok{% endif %}">
+        <div class="burn-label">営業損益（月次）</div>
+        <div class="burn-value">{{ "{:+,.1f}".format(cash_burn.operating_monthly) }}万円/月</div>
+        <div class="burn-sub">{% if cash_burn.operating_monthly < 0 %}本業で毎月 約{{ "{:,.0f}".format(cash_burn.operating_monthly|abs) }}万円の赤字{% else %}本業は黒字{% endif %}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if cash_burn.debt_repayment_monthly_est %}
+    <div class="col-md-4">
+      <div class="burn-card">
+        <div class="burn-label">推定月次返済</div>
+        <div class="burn-value">約{{ "{:,.1f}".format(cash_burn.debt_repayment_monthly_est) }}万円/月</div>
+        <div class="burn-sub">有利子負債÷10年の推計（実際は要確認）</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if cash_burn.real_burn_monthly is not none %}
+    <div class="col-md-4">
+      <div class="burn-card {% if cash_burn.real_burn_monthly >= 0 %}ok{% endif %}">
+        <div class="burn-label">実質バーン</div>
+        <div class="burn-value">{{ "{:+,.1f}".format(cash_burn.real_burn_monthly) }}万円/月</div>
+        <div class="burn-sub">{% if cash_burn.real_burn_monthly < 0 %}毎月 約{{ "{:,.0f}".format(cash_burn.real_burn_monthly|abs) }}万円が消える{% else %}余力あり{% endif %}</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if cash_burn.runway_months or cash_burn.breakeven_required_yearly %}
+  <div class="card p-3 mb-4" style="background: linear-gradient(135deg, #fff7ed, #fef3c7); border: 1px solid #fbbf24;">
+    <h6 class="fw-bold mb-3" style="color:#b45309;"><i class="fas fa-bullseye me-1"></i>黒字化・資金管理ターゲット</h6>
+    <div class="row g-3">
+      {% if cash_burn.breakeven_required_yearly %}
+      <div class="col-md-6"><div class="small text-muted">本業黒字化に必要な年間改善額</div><div class="fs-4 fw-bold" style="color:#c2410c;">+{{ "{:,.0f}".format(cash_burn.breakeven_required_yearly) }}万円/年</div></div>
+      {% endif %}
+      {% if cash_burn.runway_months %}
+      <div class="col-md-6"><div class="small text-muted">現金ベースの資金余力（推計）</div><div class="fs-4 fw-bold" style="color:#c2410c;">約{{ cash_burn.runway_months }}ヶ月</div><div class="small text-muted">※このペースで消えた場合の持続月数</div></div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {# EBITDA（減価償却を足し戻した本業の現金生成力） #}
+  {% if cash_ebitda and cash_ebitda.ebitda is not none %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-coins me-1 text-warning"></i>EBITDA — 減価償却を足し戻した本業の稼ぐ力</h6>
+  <div class="card p-3 mb-4">
+    <div class="row g-3 small">
+      <div class="col-md-3"><div class="text-muted">減価償却費</div><div class="fs-5 fw-bold">{{ "{:,.0f}".format(cash_ebitda.depreciation) }}万円</div><div class="text-muted small">設備の価値減少分</div></div>
+      <div class="col-md-3"><div class="text-muted"><abbr class="term" title="営業利益に減価償却費を足し戻した、本業で現金が生まれる力">EBITDA</abbr></div><div class="fs-5 fw-bold">{{ "{:+,.0f}".format(cash_ebitda.ebitda) }}万円</div><div class="text-muted small">営業利益＋減価償却</div></div>
+      {% if cash_ebitda.ebitda_margin is not none %}
+      <div class="col-md-3"><div class="text-muted">EBITDAマージン</div><div class="fs-5 fw-bold">{{ cash_ebitda.ebitda_margin }}%</div><div class="text-muted small">売上に対する比率</div></div>
+      {% endif %}
+      {% if cash_ebitda.debt_to_ebitda %}
+      <div class="col-md-3 pro-only">
+        <div class="text-muted">有利子負債÷EBITDA</div>
+        <div class="fs-5 fw-bold">{{ cash_ebitda.debt_to_ebitda }}倍
+          {% if cash_ebitda.debt_to_ebitda > 5 %}<span class="wc-indicator wc-bad">要注意</span>
+          {% elif cash_ebitda.debt_to_ebitda > 3 %}<span class="wc-indicator wc-ok">やや重い</span>
+          {% else %}<span class="wc-indicator wc-good">健全</span>{% endif %}
+        </div>
+        <div class="text-muted small">何年で借金を返せるか（5倍超で金融機関警戒）</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# 運転資本 — プロ向け #}
+  {% if cash_wc and (cash_wc.receivables_days is defined or cash_wc.inventory_days is defined or cash_wc.debt_equity_ratio is defined) %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4 pro-only"><i class="fas fa-sync me-1 text-primary"></i>運転資本指標（プロ向け）</h6>
+  <div class="card p-3 mb-4 pro-only"><div class="row g-3 small">
+    {% if cash_wc.receivables_days %}
+    <div class="col-md-3"><div class="text-muted">売上債権回転期間</div><div class="fs-5 fw-bold">{{ cash_wc.receivables_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.receivables_days }}">{% if cash_wc.labels.receivables_days == 'good' %}良{% elif cash_wc.labels.receivables_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">回転率 {{ cash_wc.receivables_turnover }}回／年</div></div>
+    {% endif %}
+    {% if cash_wc.inventory_days %}
+    <div class="col-md-3"><div class="text-muted">在庫回転期間</div><div class="fs-5 fw-bold">{{ cash_wc.inventory_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.inventory_days }}">{% if cash_wc.labels.inventory_days == 'good' %}良{% elif cash_wc.labels.inventory_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">回転率 {{ cash_wc.inventory_turnover }}回／年</div></div>
+    {% endif %}
+    {% if cash_wc.ccc_days %}
+    <div class="col-md-3"><div class="text-muted"><abbr class="term" title="売掛金になってから現金化するまでの日数。短いほど資金効率が良い">CCC</abbr>（推計）</div><div class="fs-5 fw-bold">{{ cash_wc.ccc_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.ccc_days }}">{% if cash_wc.labels.ccc_days == 'good' %}良{% elif cash_wc.labels.ccc_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">買掛金45日仮定</div></div>
+    {% endif %}
+    {% if cash_wc.debt_equity_ratio %}
+    <div class="col-md-3"><div class="text-muted">負債比率</div><div class="fs-5 fw-bold">{{ cash_wc.debt_equity_ratio }}% <span class="wc-indicator wc-{{ cash_wc.labels.debt_equity_ratio }}">{% if cash_wc.labels.debt_equity_ratio == 'good' %}健全{% elif cash_wc.labels.debt_equity_ratio == 'ok' %}普通{% else %}要注意{% endif %}</span></div><div class="text-muted small">100%以下が健全</div></div>
+    {% endif %}
+    {% if cash_wc.cash_months_of_sales %}
+    <div class="col-md-3"><div class="text-muted">月商キャッシュ倍率</div><div class="fs-5 fw-bold">{{ cash_wc.cash_months_of_sales }}ヶ月分</div><div class="text-muted small">現預金を月商で割った値</div></div>
+    {% endif %}
+  </div></div>
+  {% endif %}
+
+  {# AI による補足（キャッシュ観点の課題） #}
+  <div class="data-limit mt-4">
+    <i class="fas fa-info-circle me-1"></i>バーンレート・運転資本は決算書からの推計値です。正確な資金繰り管理には <strong>月次キャッシュフロー計算書</strong> の作成を推奨。借入明細（銀行別・金利・残高・返済期限）があれば「推定返済額」を実額に差し替え可能です。
+  </div>
+</div>
+
+{# ========== タブ3：ビジネスアドバイス ========== #}
+<div class="cp-tab-panel" id="panel-advice">
+
+  {# 統合再生プラン — プロ向け #}
+  {% if result.integrated_turnaround_plan %}
+  {% set tp = result.integrated_turnaround_plan %}
+  <h6 class="fw-bold text-muted small mb-3 mt-2 pro-only"><i class="fas fa-route me-1" style="color:#4338ca;"></i>統合プラン — 支出 × 収入 × 財務 の3軸（プロ向け）</h6>
+  <div class="turnaround-box pro-only">
+    {% if tp.story %}<div class="turnaround-story">{{ tp.story }}</div>{% endif %}
+    <div class="row g-3">
+      {% if tp.expense_reduction %}
+      <div class="col-md-4 turnaround-axis">
+        <h6><i class="fas fa-cut me-1"></i>支出削減</h6>
+        {% for e in tp.expense_reduction %}
+        <div class="small mb-2 p-2" style="background:#fafafa; border-radius:6px;">
+          <div class="fw-bold">{{ e.item }}</div>
+          <div class="text-muted" style="font-size:.8rem;">{{ "{:,.0f}".format(e.current_yearly or 0) }}万 → {{ "{:,.0f}".format(e.target_yearly or 0) }}万 <span class="text-danger fw-bold">({{ "{:+,.0f}".format(e.delta_yearly or 0) }}万)</span></div>
+          {% if e.difficulty %}<div class="small text-muted">難易度: {{ e.difficulty }}</div>{% endif %}
+          {% if e.note %}<div class="small mt-1">{{ e.note }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if tp.revenue_boost %}
+      <div class="col-md-4 turnaround-axis">
+        <h6><i class="fas fa-arrow-up me-1"></i>収入改善</h6>
+        {% for r in tp.revenue_boost %}
+        <div class="small mb-2 p-2" style="background:#fafafa; border-radius:6px;">
+          <div class="fw-bold">{{ r.item }}</div>
+          <div class="text-success fw-bold small">+{{ "{:,.0f}".format(r.delta_yearly or 0) }}万/年</div>
+          {% if r.difficulty %}<div class="small text-muted">難易度: {{ r.difficulty }}</div>{% endif %}
+          {% if r.note %}<div class="small mt-1">{{ r.note }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if tp.finance_options %}
+      <div class="col-md-4 turnaround-axis">
+        <h6><i class="fas fa-university me-1"></i>財務調達</h6>
+        {% for f in tp.finance_options %}
+        <div class="small mb-2 p-2" style="background:#fafafa; border-radius:6px;">
+          <div class="fw-bold">{{ f.item }}</div>
+          <div class="text-primary fw-bold small">{{ "{:,.0f}".format(f.amount or 0) }}万</div>
+          {% if f.difficulty %}<div class="small text-muted">難易度: {{ f.difficulty }}</div>{% endif %}
+          {% if f.note %}<div class="small mt-1">{{ f.note }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# 売上向上アイデア 4つ #}
+  {% if result.revenue_ideas %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-chart-line me-1" style="color:#ea580c;"></i>売上向上アイデア（{{ result.revenue_ideas|length }}つ）</h6>
+  {% for idea in result.revenue_ideas %}
+  <div class="idea-card">
+    <div class="d-flex justify-content-between align-items-start mb-1">
+      <div><span class="idea-title">{{ idea.title }}</span>{% if idea.timeframe %}<span class="idea-tf">{{ idea.timeframe }}</span>{% endif %}</div>
+    </div>
+    {% if idea.impact_min is not none or idea.impact_max is not none %}
+    <div class="idea-impact">📈 売上インパクト: +{{ "{:,.0f}".format(idea.impact_min or 0) }}〜{{ "{:,.0f}".format(idea.impact_max or 0) }}万円/年</div>
+    {% endif %}
+    {% if idea.why %}<div class="small text-muted mt-2"><strong>なぜ:</strong> {{ idea.why }}</div>{% endif %}
+    {% if idea.how %}<div class="small mt-1"><strong>どう:</strong> {{ idea.how }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {# コスト最適化アイデア 3つ #}
+  {% if result.cost_ideas %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-scissors me-1 text-danger"></i>コスト最適化アイデア（{{ result.cost_ideas|length }}つ）</h6>
+  {% for idea in result.cost_ideas %}
+  <div class="cost-card">
+    <div class="cost-title">{{ idea.title }}</div>
+    {% if idea.savings_max is not none %}<div class="cost-savings">✂️ 削減ポテンシャル: 〜{{ "{:,.0f}".format(idea.savings_max or 0) }}万円/年</div>{% endif %}
+    {% if idea.why %}<div class="small text-muted mt-2"><strong>なぜ:</strong> {{ idea.why }}</div>{% endif %}
+    {% if idea.how %}<div class="small mt-1"><strong>どう:</strong> {{ idea.how }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {# アクション提案 #}
+  {% if result.actions %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-tasks me-1" style="color:#1a237e;"></i>アクション提案（次の面談でそのまま話せる具体性）</h6>
+  {% for action in result.actions %}
+  {% set prio_class = 'prio-high' if action.priority == '高' else ('prio-mid' if action.priority == '中' else 'prio-low') %}
+  <div class="action-card {{ prio_class }}">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div class="action-title">
+        {{ action.title }}
+        {% if action.urgency %}<span class="urgency-badge urg-{{ action.urgency }}-badge">{{ action.urgency }}</span>{% endif %}
+      </div>
+      {% if action.priority == '高' %}<span class="priority-high fw-semibold">優先度 高</span>{% elif action.priority == '中' %}<span class="priority-mid fw-semibold">優先度 中</span>{% else %}<span class="priority-low fw-semibold">優先度 低</span>{% endif %}
+    </div>
+    {% if action.impact %}<div class="impact-pill">💰 {{ action.impact }}</div>{% if action.impact_basis %}<div class="small text-muted mb-2">根拠: {{ action.impact_basis }}</div>{% endif %}{% endif %}
+    <div class="action-detail">{{ action.detail }}</div>
+    <div class="action-grid">
+      {% if action.who %}<div class="item"><div class="ilabel">担当</div><div class="ival">{{ action.who }}</div></div>{% endif %}
+      {% if action.deadline %}<div class="item"><div class="ilabel">期限</div><div class="ival">{{ action.deadline }}</div></div>{% endif %}
+      {% if action.first_step %}<div class="item" style="grid-column: span 2;"><div class="ilabel">明日からの一歩目</div><div class="ival">{{ action.first_step }}</div></div>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {# クロスセル提案 — プロ向け #}
+  {% if result.cross_sell %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4 pro-only"><i class="fas fa-hand-holding-usd me-1" style="color:#312e81;"></i>顧問料アップの提案ネタ — 税理士→社長へのアップセル切り口（プロ向け）</h6>
+  {% for cs in result.cross_sell %}
+  <div class="cross-sell-card pro-only">
+    {% if cs.category %}<span class="cross-category">{{ cs.category }}</span>{% endif %}
+    <div class="cross-title">{{ cs.title }}</div>
+    <div class="small text-muted mb-2">{{ cs.reason }}</div>
+    {% if cs.price_range %}<div class="cross-price"><i class="fas fa-yen-sign me-1"></i>{{ cs.price_range }}</div>{% endif %}
+    {% if cs.talk_script %}<div class="cross-script"><strong>💬 社長への切り口：</strong>{{ cs.talk_script }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {# KPI Watch — プロ向け #}
+  {% if result.kpi_watch %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4 pro-only"><i class="fas fa-tachometer-alt me-1" style="color:#1a237e;"></i>注目すべきKPI（プロ向け）</h6>
+  <div class="row g-3 mb-3 pro-only">
+    {% for kpi in result.kpi_watch %}
+    <div class="col-md-4"><div class="card kpi-card p-3 h-100">
+      <div class="fw-bold small text-uppercase text-muted mb-2">{{ kpi.name }}</div>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div><div class="text-muted" style="font-size:.7rem;">現状</div><div class="fw-bold">{{ kpi.current }}</div></div>
+        <i class="fas fa-long-arrow-alt-right text-muted mx-2"></i>
+        <div class="text-end"><div class="text-muted" style="font-size:.7rem;">目標</div><div class="fw-bold text-primary">{{ kpi.target }}</div></div>
+      </div>
+      <div class="text-muted small">{{ kpi.comment }}</div>
+    </div></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# 補助金・助成金マッチング #}
+  {% set sub_items = result.subsidies['items'] if result.subsidies else [] %}
+  {% set sub_tags = result.subsidies['issue_tags'] if result.subsidies else [] %}
+  {% if sub_items %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-coins me-1 text-warning"></i>申請可能な補助金・助成金 <span class="text-muted">（{{ sub_items|length }}件、適合度順）</span></h6>
+  {% if sub_tags %}
+  <div class="small text-muted mb-2">マッチング条件：{% for t in sub_tags %}<span class="badge bg-light text-dark me-1">{{ t }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if result.subsidies and result.subsidies['employees_used'] %}
+  <div class="small text-muted mb-2">
+    💡 従業員数: <strong>{{ result.subsidies['employees_used'] }}人</strong>（{{ result.subsidies['employees_source'] }}）で適合判定。
+    {% if result.subsidies['employees_source'] == '人件費から推定' %}実数と異なる場合は、社長にヒアリングして再分析推奨{% endif %}
+  </div>
+  {% endif %}
+  <div class="row g-3 mb-4">
+    {% for s in sub_items %}
+    <div class="col-md-6">
+      <div class="card h-100 p-3" style="border-left: 4px solid {% if s.match_score >= 60 %}#22c55e{% elif s.match_score >= 30 %}#f59e0b{% else %}#9ca3af{% endif %};">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <span class="badge me-1" style="background:{% if s.category == '補助金' %}#3b82f6{% elif s.category == '助成金' %}#22c55e{% else %}#a855f7{% endif %};color:#fff;">{{ s.category }}</span>
+            <span class="fw-bold">{{ s.name }}</span>
+          </div>
+          <span class="rank-badge" style="background:#fef3c7;color:#b45309;">適合 {{ s.match_score }}%</span>
+        </div>
+        <div class="small text-muted mt-2">{{ s.purpose }}</div>
+        <div class="mt-2">
+          <span class="fw-bold" style="color:#ea580c;font-size:.95rem;">💰 {{ s.amount_max_label }}</span>
+          {% if s.subsidy_rate and s.subsidy_rate != "—" %}
+          <span class="small text-muted ms-2">補助率 {{ s.subsidy_rate }}</span>
+          {% endif %}
+        </div>
+        {% if s.match_reasons %}
+        <div class="small mt-2" style="background:#f9fafb;padding:6px 10px;border-radius:4px;">
+          {% for r in s.match_reasons %}<div>✓ {{ r }}</div>{% endfor %}
+        </div>
+        {% endif %}
+        <div class="small text-muted mt-2">💡 {{ s.tip }}</div>
+        <div class="mt-2"><a href="{{ s.url }}" target="_blank" class="btn btn-sm btn-outline-primary">公式情報を見る <i class="fas fa-external-link-alt ms-1"></i></a></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>適合度はあくまで参考。申請可否は各補助金の詳細要件でご確認ください。CoPartner経由で補助金申請パートナーの紹介も可能（別途ご相談）。</div>
+  {% endif %}
+
+  {# ヒアリングシート（3カテゴリ+ 借入明細） #}
+  {% if result.hearing_sheet %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-clipboard-list me-1" style="color:#b45309;"></i>税理士ヒアリングシート（社長への確認事項）</h6>
+  <div class="mb-2 small text-muted">以下を社長からヒアリングすることで、アドバイスの精度が大幅に上がります。</div>
+  {% if result.hearing_sheet.business_understanding %}
+  <div class="hearing-cat"><h6>🏢 事業理解</h6>{% for q in result.hearing_sheet.business_understanding %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
+  {% endif %}
+  {% if result.hearing_sheet.customer_market %}
+  <div class="hearing-cat"><h6>👥 顧客・市場</h6>{% for q in result.hearing_sheet.customer_market %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
+  {% endif %}
+  {% if result.hearing_sheet.growth_opportunity %}
+  <div class="hearing-cat"><h6>🚀 成長機会</h6>{% for q in result.hearing_sheet.growth_opportunity %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
+  {% endif %}
+  {% if result.hearing_sheet.debt_and_finance %}
+  <div class="hearing-cat"><h6>💴 借入・財務</h6>{% for q in result.hearing_sheet.debt_and_finance %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
+  {% endif %}
+  {% endif %}
+</div>
+
+{# ========== タブ4：改善シミュレーター ========== #}
+<div class="cp-tab-panel" id="panel-simulator">
+  <h6 class="fw-bold mb-3"><i class="fas fa-sliders-h me-2 text-primary"></i>改善シミュレーター — スライダーで「もしこうしたら」を試す</h6>
+  <div class="small text-muted mb-3">各項目を動かすと、営業利益・スコアの変化が即座に計算されます。
+  施策の効果を社長と一緒に確認するときに使えます。</div>
+
+  <div class="row g-4">
+    <div class="col-md-6">
+      <div class="card p-3">
+        <h6 class="fw-bold mb-3" style="font-size:.95rem;">操作項目</h6>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold d-flex justify-content-between">売上の増減 <span id="simRevLbl">+0.0%</span></label>
+          <input type="range" class="form-range" id="simRev" min="-30" max="50" step="0.5" value="0">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold d-flex justify-content-between">粗利率の改善 <span id="simGmLbl">+0.0pt</span></label>
+          <input type="range" class="form-range" id="simGm" min="-10" max="15" step="0.5" value="0">
+          <div class="form-text small">業界中央値や競合並みに引き上げる場合の試算</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold d-flex justify-content-between">販管費の増減 <span id="simSeLbl">+0.0%</span></label>
+          <input type="range" class="form-range" id="simSe" min="-30" max="20" step="0.5" value="0">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold d-flex justify-content-between">売掛金回収日数の短縮 <span id="simRecLbl">+0日</span></label>
+          <input type="range" class="form-range" id="simRec" min="-60" max="0" step="1" value="0">
+          <div class="form-text small">回収を早めるとキャッシュ回復額を試算</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold d-flex justify-content-between">在庫日数の短縮 <span id="simInvLbl">+0日</span></label>
+          <input type="range" class="form-range" id="simInv" min="-60" max="0" step="1" value="0">
+        </div>
+        <button id="simReset" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo me-1"></i>リセット</button>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card p-3 h-100" style="background: linear-gradient(135deg, #fff7ed, #fef3c7);">
+        <h6 class="fw-bold mb-3" style="font-size:.95rem;color:#b45309;">改善後の予測</h6>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="small text-muted">売上高</div>
+            <div class="fs-5 fw-bold"><span id="outRev">{{ "{:,.0f}".format(fd.revenue) }}</span><span class="small text-muted">万</span></div>
+            <div class="small" id="outRevDelta" style="color:#dc2626;">±0万</div>
+          </div>
+          <div class="col-6">
+            <div class="small text-muted">営業利益</div>
+            <div class="fs-5 fw-bold" id="outOp">{{ "{:+,.0f}".format(fd.operating_profit) }}<span class="small text-muted">万</span></div>
+            <div class="small fw-bold" id="outOpDelta" style="color:#dc2626;">±0万</div>
+          </div>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="small text-muted">営業利益率</div>
+            <div class="fs-5 fw-bold" id="outOpRate">{{ "%.1f"|format(fd.operating_profit / fd.revenue * 100 if fd.revenue else 0) }}%</div>
+          </div>
+          <div class="col-6">
+            <div class="small text-muted">粗利</div>
+            <div class="fs-5 fw-bold" id="outGp">{{ "{:,.0f}".format(fd.gross_profit) }}<span class="small text-muted">万</span></div>
+          </div>
+        </div>
+
+        <hr>
+
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <div class="small text-muted">回収条件改善でキャッシュ回復</div>
+            <div class="fs-6 fw-bold" id="outCashRec" style="color:#15803d;">+0万</div>
+          </div>
+          <div class="col-6">
+            <div class="small text-muted">在庫削減でキャッシュ回復</div>
+            <div class="fs-6 fw-bold" id="outCashInv" style="color:#15803d;">+0万</div>
+          </div>
+        </div>
+        <div class="small text-muted text-center mt-2">合計キャッシュ回復額 <span class="fw-bold" id="outCashTotal" style="color:#15803d;font-size:1rem;">+0万</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-3 mt-3" style="background:#f9fafb;">
+    <div class="small fw-semibold mb-2">💡 シミュレーションのコツ</div>
+    <ul class="small text-muted mb-0" style="padding-left:1.2rem;">
+      <li>「売上+5%」「販管費-5%」を組み合わせて少しずつ試すと現実的な改善目標が見える</li>
+      <li>粗利率改善 +5pt は値上げ・原価交渉を本気で実行した時の目安</li>
+      <li>売掛金30日短縮で生まれるキャッシュは、運転資金の余裕として使える</li>
+      <li>このシミュレーションは単純計算。実際は売上増→売掛金増、コスト削減→売上影響など連動あり</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  // 表示モード切替（社長向け/プロ向け）
+  const modeBtns = document.querySelectorAll('#modeSwitch button');
+  function applyMode(mode) {
+    document.body.classList.toggle('mode-simple', mode === 'simple');
+    modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    try { localStorage.setItem('cp_mode', mode); } catch(e) {}
+  }
+  modeBtns.forEach(b => b.addEventListener('click', () => applyMode(b.dataset.mode)));
+  // 初期モード（保存があれば復元、なければ社長向け）
+  let initMode = 'simple';
+  try { initMode = localStorage.getItem('cp_mode') || 'simple'; } catch(e) {}
+  applyMode(initMode);
+
+  // タブ切替
+  const tabs = document.querySelectorAll('.cp-tab');
+  const panels = document.querySelectorAll('.cp-tab-panel');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    const name = t.dataset.tab;
+    tabs.forEach(x => x.classList.toggle('active', x === t));
+    panels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+  }));
+
+  // 円グラフ
+  const PALETTE = ['#f59e0b','#fb923c','#ef4444','#a855f7','#3b82f6','#22c55e','#14b8a6','#6366f1','#ec4899','#84cc16','#f97316','#06b6d4','#8b5cf6','#d946ef'];
+  function drawPie(canvasId, labels, data) {
+    const el = document.getElementById(canvasId);
+    if (!el) return;
+    new Chart(el, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: PALETTE, borderWidth: 2, borderColor: '#fff' }] },
+      options: { responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'right', labels: { font: { size: 10 } } },
+          tooltip: { callbacks: { label: ctx => {
+            const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+            const pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
+            return `${ctx.label}: ${ctx.parsed.toLocaleString()}万円 (${pct}%)`;
+          }}}}}
+    });
+  }
+  {% if se_items %}drawPie('chartSE', {{ se_items|map(attribute=0)|list|tojson }}, {{ se_items|map(attribute=1)|list|tojson }});{% endif %}
+  {% if rev_items %}drawPie('chartRev', {{ rev_items|map(attribute=0)|list|tojson }}, {{ rev_items|map(attribute=1)|list|tojson }});{% endif %}
+  {% if ca_items %}drawPie('chartCA', {{ ca_items|map(attribute=0)|list|tojson }}, {{ ca_items|map(attribute=1)|list|tojson }});{% endif %}
+  {% if cl_items %}drawPie('chartCL', {{ cl_items|map(attribute=0)|list|tojson }}, {{ cl_items|map(attribute=1)|list|tojson }});{% endif %}
+
+  // ========== 改善シミュレーター ==========
+  const baseRev = {{ fd.revenue or 0 }};
+  const baseCos = {{ fd.cost_of_sales or 0 }};
+  const baseGp  = {{ fd.gross_profit or 0 }};
+  const baseSe  = {{ fd.selling_expenses or 0 }};
+  const baseOp  = {{ fd.operating_profit or 0 }};
+  const baseRec = {{ fd.receivables or 0 }};
+  const baseInv = {{ fd.inventory or 0 }};
+  const baseGmRate = baseRev > 0 ? (baseGp / baseRev * 100) : 0;
+  const recDays = (baseRev > 0 && baseRec > 0) ? (baseRec / baseRev * 365) : 0;
+  const invDays = (baseCos > 0 && baseInv > 0) ? (baseInv / baseCos * 365) : 0;
+
+  function fmt(n) { return n.toLocaleString('ja-JP', {maximumFractionDigits: 0}); }
+  function fmtPct(n) { return (n>=0?'+':'') + n.toFixed(1) + '%'; }
+  function fmtDelta(n) { return (n>=0?'+':'') + fmt(n) + '万'; }
+
+  function runSim() {
+    const dRev = parseFloat(document.getElementById('simRev').value);
+    const dGm  = parseFloat(document.getElementById('simGm').value);
+    const dSe  = parseFloat(document.getElementById('simSe').value);
+    const dRec = parseFloat(document.getElementById('simRec').value);
+    const dInv = parseFloat(document.getElementById('simInv').value);
+
+    document.getElementById('simRevLbl').textContent = fmtPct(dRev);
+    document.getElementById('simGmLbl').textContent  = (dGm>=0?'+':'') + dGm.toFixed(1) + 'pt';
+    document.getElementById('simSeLbl').textContent  = fmtPct(dSe);
+    document.getElementById('simRecLbl').textContent = (dRec>=0?'+':'') + dRec + '日';
+    document.getElementById('simInvLbl').textContent = (dInv>=0?'+':'') + dInv + '日';
+
+    const newRev = baseRev * (1 + dRev/100);
+    const newGmRate = Math.max(0, Math.min(100, baseGmRate + dGm));
+    const newGp = newRev * newGmRate / 100;
+    const newSe = baseSe * (1 + dSe/100);
+    const newOp = newGp - newSe;
+    const newOpRate = newRev > 0 ? newOp / newRev * 100 : 0;
+
+    document.getElementById('outRev').textContent = fmt(newRev);
+    document.getElementById('outRevDelta').textContent = fmtDelta(newRev - baseRev);
+    document.getElementById('outRevDelta').style.color = (newRev >= baseRev) ? '#15803d' : '#dc2626';
+
+    document.getElementById('outOp').innerHTML = (newOp>=0?'+':'') + fmt(newOp) + '<span class="small text-muted">万</span>';
+    document.getElementById('outOpDelta').textContent = fmtDelta(newOp - baseOp);
+    document.getElementById('outOpDelta').style.color = (newOp >= baseOp) ? '#15803d' : '#dc2626';
+
+    document.getElementById('outOpRate').textContent = newOpRate.toFixed(1) + '%';
+    document.getElementById('outGp').innerHTML = fmt(newGp) + '<span class="small text-muted">万</span>';
+
+    // キャッシュ回復額（売掛金日数短縮 × 月商）
+    const cashRec = recDays > 0 && dRec < 0 ? (newRev / 365) * (-dRec) : 0;
+    const cashInv = invDays > 0 && dInv < 0 ? (baseCos * (1 + dRev/100 + dGm/100*0.5) / 365) * (-dInv) : 0;
+    document.getElementById('outCashRec').textContent = '+' + fmt(cashRec) + '万';
+    document.getElementById('outCashInv').textContent = '+' + fmt(cashInv) + '万';
+    document.getElementById('outCashTotal').textContent = '+' + fmt(cashRec + cashInv) + '万';
+  }
+
+  ['simRev','simGm','simSe','simRec','simInv'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', runSim);
+  });
+  const simReset = document.getElementById('simReset');
+  if (simReset) simReset.addEventListener('click', () => {
+    ['simRev','simGm','simSe','simRec','simInv'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = 0;
+    });
+    runSim();
+  });
+  runSim();
+
+  // 時系列トレンド
+  {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+  // 単軸の折れ線
+  function drawLine(id, labels, datasets, title, unit) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    new Chart(el, {
+      type: 'line',
+      data: { labels, datasets: datasets.map((d, i) => ({
+        label: d.label, data: d.data, borderColor: d.color || PALETTE[i],
+        backgroundColor: (d.color || PALETTE[i]) + '33',
+        tension: 0.25, borderWidth: 2, pointRadius: 4, pointHoverRadius: 6,
+        yAxisID: d.yAxisID || 'y'
+      })) },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'top', labels: { font: { size: 10 } } },
+          title: { display: true, text: title, font: { size: 13, weight: '600' } }
+        },
+        scales: { y: { ticks: { callback: v => v.toLocaleString() + (unit || '') } } }
+      }
+    });
+  }
+
+  // 2軸の折れ線（左右で単位違いを扱う）
+  function drawDualLine(id, labels, left, right, title, leftUnit, rightUnit) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    new Chart(el, {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: left.label, data: left.data, borderColor: left.color, backgroundColor: left.color + '33',
+          tension: 0.25, borderWidth: 2, pointRadius: 4, yAxisID: 'yL' },
+        { label: right.label, data: right.data, borderColor: right.color, backgroundColor: right.color + '33',
+          tension: 0.25, borderWidth: 2, pointRadius: 4, yAxisID: 'yR' }
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'top', labels: { font: { size: 10 } } },
+          title: { display: true, text: title, font: { size: 13, weight: '600' } }
+        },
+        scales: {
+          yL: { position: 'left', ticks: { callback: v => v.toLocaleString() + (leftUnit || '') },
+            title: { display: true, text: left.label + (leftUnit ? ` (${leftUnit})` : '') } },
+          yR: { position: 'right', grid: { drawOnChartArea: false },
+            ticks: { callback: v => v.toLocaleString() + (rightUnit || '') },
+            title: { display: true, text: right.label + (rightUnit ? ` (${rightUnit})` : '') } }
+        }
+      }
+    });
+  }
+
+  const periods = {{ (result.trend_metrics.periods or [])|tojson }};
+
+  // 1. 売上 & 営業利益（同じ単位=万円、共通軸でOK）
+  drawLine('trendRevProfit', periods, [
+    { label: '売上高', data: {{ (result.trend_metrics.revenue or [])|tojson }}, color: '#3b82f6' },
+    { label: '営業利益', data: {{ (result.trend_metrics.operating_profit or [])|tojson }}, color: '#f59e0b' }
+  ], '売上高 & 営業利益(万円)', '万');
+
+  // 2. 粗利率のみ（単独でつぶれ防止）
+  drawLine('trendGrossMargin', periods, [
+    { label: '粗利率(%)', data: {{ (result.trend_metrics.gross_margin or [])|tojson }}, color: '#22c55e' }
+  ], '粗利率の推移(%)', '%');
+
+  // 3. 売掛回収の月数（単独表示）
+  {% if result.trend_metrics.receivables_months is defined %}
+  drawLine('trendRecMonths', periods, [
+    { label: '売掛金の月数（売上の何ヶ月分が回収待ちか）', data: {{ (result.trend_metrics.receivables_months or [])|tojson }}, color: '#ef4444' }
+  ], '売掛金の回収月数の推移（短い方が良い）', 'ヶ月');
+  {% endif %}
+
+  // 4. 在庫の月数（在庫があるときだけ）— block scripts は別スコープなので has_inv を再評価
+  {% set _inv = result.trend_metrics.inventory_months or [] %}
+  {% if _inv and (_inv|max) > 0 %}
+  drawLine('trendInvMonths', periods, [
+    { label: '在庫の月数（売り切るのに何ヶ月か）', data: {{ _inv|tojson }}, color: '#a855f7' }
+  ], '在庫月数の推移（短い方が良い）', 'ヶ月');
+  {% endif %}
+  {% endif %}
+})();
+</script>
+{% endblock %}
