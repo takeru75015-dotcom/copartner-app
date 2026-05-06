@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}金融・保険 提携パートナー紹介{% endblock %}
+{% block content %}
+<div class="card mb-4">
+  <div class="card-body">
+    <h4 class="fw-bold mb-2"><i class="fas fa-handshake me-2 text-primary"></i>提携パートナーへの紹介依頼</h4>
+    <div class="text-muted small">CoPartner 提携の金融・保険パートナーへ送客します</div>
+  </div>
+</div>
+
+{% if title_text %}
+<div class="alert alert-info">
+  <strong>パートナー区分:</strong> {{ partner_type }}<br>
+  <strong>相談内容:</strong> {{ title_text }}
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3">📌 紹介パートナーの種類</h6>
+    <ul class="small">
+      <li><strong>銀行借換・条件交渉</strong>: 提携の認定支援機関・地銀リレーション保有コンサル（複数行打診型）</li>
+      <li><strong>法人保険</strong>: 独立系保険代理店（特定保険会社専属ではないニュートラル提案）</li>
+      <li><strong>リース・割賦</strong>: 大手リース会社2-3社の見積比較</li>
+      <li><strong>資本性ローン・増資</strong>: 認定支援機関 + 公庫窓口経験者</li>
+    </ul>
+
+    <h6 class="fw-bold mb-3 mt-4">📌 CoPartner の関与</h6>
+    <ul class="small">
+      <li>事前に決算書分析を共有 → パートナー側は提案前に状況把握済み</li>
+      <li>提案フォーマットは CoPartner レビュー（社長が比較しやすい形に整形）</li>
+      <li>料金は<strong>パートナー側からの紹介手数料モデル</strong>（顧客側に追加負担なし）</li>
+    </ul>
+
+    <div class="alert alert-warning small mt-4">
+      <i class="fas fa-info-circle me-1"></i>
+      <strong>現在β版</strong>のため、お申込みは CoPartner 運営（{{ user.email }} 経由）に直接ご連絡ください。
+    </div>
+
+    <div class="mt-3">
+      <a href="mailto:takeru75015@gmail.com?subject=【パートナー紹介依頼】{{ partner_type }}&body=区分: {{ partner_type }}%0A相談内容: {{ title_text }}%0A顧客ID: {{ client_id }}%0A%0Aご記入事項：%0A・社名:%0A・連絡先:%0A・希望時期:%0A・現状の課題:" class="btn btn-primary">
+        <i class="fas fa-envelope me-1"></i>メールで申込（β版）
+      </a>
+      {% if client_id %}
+      <a href="/clients/{{ client_id }}" class="btn btn-outline-secondary ms-2">クライアント画面に戻る</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

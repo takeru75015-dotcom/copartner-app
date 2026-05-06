@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}補助金 申請代行パートナー{% endblock %}
+{% block content %}
+<div class="card mb-4">
+  <div class="card-body">
+    <h4 class="fw-bold mb-2"><i class="fas fa-handshake me-2 text-warning"></i>補助金 申請代行パートナーへの依頼</h4>
+    <div class="text-muted small">CoPartner 提携の補助金申請代行業者へ送客します（成果報酬型）</div>
+  </div>
+</div>
+
+{% if subsidy_name %}
+<div class="alert alert-info">
+  <strong>選択した補助金：</strong>{{ subsidy_name }}
+</div>
+{% endif %}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3">📌 サービス概要</h6>
+    <ul class="small">
+      <li>提携先の認定支援機関・補助金申請代行会社が申請書類作成を代行</li>
+      <li>料金体系: <strong>着手金 0円 + 成果報酬型</strong>（採択時のみ補助金額の10-15%）</li>
+      <li>不採択時は費用なし（ノーリスク）</li>
+      <li>過去採択率の高い業者のみ厳選紹介</li>
+    </ul>
+
+    <h6 class="fw-bold mb-3 mt-4">📌 流れ</h6>
+    <ol class="small">
+      <li>下記フォームを送信 → CoPartner 事務局が確認</li>
+      <li>提携パートナーから 3営業日以内に連絡</li>
+      <li>無料相談 → 適合判定 → 申請開始</li>
+    </ol>
+
+    <div class="alert alert-warning small mt-4">
+      <i class="fas fa-info-circle me-1"></i>
+      <strong>現在β版</strong>のため、お申込みは CoPartner 運営（{{ user.email }} 経由）に直接ご連絡ください。
+      正式リリース時はこのページから直接送信できるようになります。
+    </div>
+
+    <div class="mt-3">
+      <a href="mailto:takeru75015@gmail.com?subject=【補助金申請代行依頼】{{ subsidy_name }}&body=補助金名: {{ subsidy_name }}%0A顧客ID: {{ client_id }}%0A%0Aご記入事項：%0A・社名:%0A・連絡先:%0A・希望時期:" class="btn btn-warning">
+        <i class="fas fa-envelope me-1"></i>メールで申込（β版）
+      </a>
+      {% if client_id %}
+      <a href="/clients/{{ client_id }}" class="btn btn-outline-secondary ms-2">クライアント画面に戻る</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

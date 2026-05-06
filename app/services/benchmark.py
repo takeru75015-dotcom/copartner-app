@@ -152,15 +152,41 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         higher_is_better=True,
     ))
 
-    # 営業利益率
-    comparisons.append(_build_comparison(
-        metric="営業利益率（本業の儲けの割合）",
-        self_value=operating_margin,
-        median=ind["operating_margin_median"],
-        top25=ind["operating_margin_top25"],
-        unit="%",
-        higher_is_better=True,
-    ))
+    # 営業利益率（黒字/赤字分離で比較）
+    is_profitable = operating_margin > 0
+    profit_med = ind.get("operating_margin_profit_median") or ind["operating_margin_median"]
+    loss_med = ind.get("operating_margin_loss_median") or 0.0
+    if is_profitable:
+        # 黒字企業 → 黒字企業のみの中央値と比較（赤字社混入の平均は使わない）
+        op_comp = _build_comparison(
+            metric="営業利益率（黒字企業のみの中央値と比較）",
+            self_value=operating_margin,
+            median=profit_med,
+            top25=ind["operating_margin_top25"],
+            unit="%",
+            higher_is_better=True,
+        )
+        op_comp["benchmark_note"] = (
+            f"黒字企業のみの業界中央値 {profit_med}%（赤字企業の中央値は {loss_med}%）。"
+            "全体平均は赤字社で押し下げられるため、黒字社は黒字社内で比較が妥当。"
+        )
+        comparisons.append(op_comp)
+    else:
+        # 赤字企業 → 赤字企業の中央値と比較（赤字社の中でどの位置か）
+        op_comp = _build_comparison(
+            metric="営業利益率（赤字企業群の中での位置）",
+            self_value=operating_margin,
+            median=loss_med,
+            top25=0.0,  # 赤字脱却ライン
+            unit="%",
+            higher_is_better=True,
+        )
+        op_comp["benchmark_note"] = (
+            f"赤字企業の業界中央値 {loss_med}%。"
+            f"黒字脱却の目安は 0% 超え、業界平均並みは {profit_med}%。"
+            "赤字社内での位置づけと、脱却ラインを意識した二段階目標設定が有効。"
+        )
+        comparisons.append(op_comp)
 
     # 自己資本比率（B/Sデータがあれば）
     total_assets = getattr(fd, "total_assets", 0) or 0
@@ -380,5 +406,7 @@ def format_benchmark_text(benchmark: Dict) -> str:
             f"(業界中央値 {c['median']}{c['unit']}, 上位25% {c['top25']}{c['unit']}) "
             f"→ {rank_label}"
         )
+        if c.get("benchmark_note"):
+            lines.append(f"    補足: {c['benchmark_note']}")
     lines.append(f"  出典: {benchmark['source_note']}")
     return "\n".join(lines)

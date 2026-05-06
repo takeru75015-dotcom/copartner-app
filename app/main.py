@@ -767,3 +767,32 @@ def reanalyze(fd_id: int, request: Request, db: Session = Depends(get_db)):
     db.query(Analysis).filter(Analysis.financial_data_id == fd_id).delete()
     db.commit()
     return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+
+
+@app.get("/partner-referral", response_class=HTMLResponse)
+def partner_referral(request: Request, type: str = "", title: str = "", client: int = 0, db: Session = Depends(get_db)):
+    """金融・保険パートナーへの送客導線"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse("partner_referral.html", {
+        "request": request,
+        "user": user,
+        "partner_type": type,
+        "title_text": title,
+        "client_id": client,
+    })
+
+
+@app.get("/subsidy-referral", response_class=HTMLResponse)
+def subsidy_referral(request: Request, subsidy: str = "", client: int = 0, db: Session = Depends(get_db)):
+    """補助金申請代行パートナーへの送客導線（提携先未確定のため申込フォーム）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse("subsidy_referral.html", {
+        "request": request,
+        "user": user,
+        "subsidy_name": subsidy,
+        "client_id": client,
+    })

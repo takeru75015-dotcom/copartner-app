@@ -276,7 +276,7 @@
     {% endif %}
     {% if fd.interest_bearing_debt > 0 %}
     <div class="col-6 col-md-3"><div class="metric-card c-red">
-      <div class="metric-label">有利子負債</div>
+      <div class="metric-label"><abbr class="term" title="金利が発生する借入（銀行借入・社債等）。EBITDAの3倍以下で健全、5倍超で銀行警戒">有利子負債</abbr></div>
       <div class="metric-value">{{ "{:,.0f}".format(fd.interest_bearing_debt) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
       {% if result.growth_rates and result.growth_rates.interest_bearing_debt is not none %}
         {% set g = result.growth_rates.interest_bearing_debt %}
@@ -519,6 +519,11 @@
         </div>
       </div>
       <div class="bench-comment">{{ c.comment }}</div>
+      {% if c.benchmark_note %}
+      <div class="small mt-2" style="background:#eff6ff;border-left:3px solid #3b82f6;padding:6px 10px;border-radius:4px;color:#1e3a8a;">
+        <i class="fas fa-info-circle me-1"></i>{{ c.benchmark_note }}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
     <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>{{ result.benchmark.source_note }}</div>
@@ -535,9 +540,25 @@
 {# ========== タブ2：キャッシュ診断 ========== #}
 <div class="cp-tab-panel" id="panel-cash">
 
+  {# 銀行視点ヘルプ — 経営者向け数字の読み方ガイド #}
+  <details class="card p-3 mb-4" style="background:#eff6ff;border:1px solid #bfdbfe;">
+    <summary class="fw-bold" style="cursor:pointer;color:#1e3a8a;"><i class="fas fa-university me-1"></i>数字の読み方ガイド（銀行・金融機関の視点）</summary>
+    <div class="mt-3 small" style="color:#1e3a8a;line-height:1.7;">
+      <div class="mb-2"><strong>📌 バーンレート</strong>：毎月どれだけ現金が燃えているか。<strong>営業赤字＋借入返済</strong>を月割りした金額。マイナスなら「資金が減る速度」。</div>
+      <div class="mb-2"><strong>📌 ランウェイ（資金余力）</strong>：今のペースで現金が尽きるまでの月数。<strong>6ヶ月切ったら危険</strong>。銀行はここを最初に見る。</div>
+      <div class="mb-2"><strong>📌 EBITDA</strong>：営業利益＋減価償却。本業で<strong>「現金がいくら生まれるか」</strong>。銀行が融資判断で重視する数字。</div>
+      <div class="mb-2"><strong>📌 有利子負債÷EBITDA</strong>：借金を本業の現金で何年で返せるか。<strong>3倍以下=健全、5倍超=銀行警戒</strong>、10倍超で新規融資ほぼ不可。</div>
+      <div class="mb-2"><strong>📌 自己資本比率</strong>：総資産のうち借入に頼らない割合。<strong>30%以上=健全、10%以下=銀行警戒</strong>、マイナス（債務超過）で融資停止リスク。</div>
+      <div class="mb-2"><strong>📌 月商キャッシュ倍率</strong>：現預金が月商の何ヶ月分あるか。<strong>1.5ヶ月以上推奨</strong>。これが薄いと突発支出で詰む。</div>
+      <div class="mb-2"><strong>📌 売掛・在庫の月数</strong>：それぞれ「月商の何ヶ月分溜まってるか」。<strong>急に増えたら回収遅延 or 在庫滞留のサイン</strong>。粉飾の入口でもある。</div>
+      <div class="mb-2"><strong>📌 流動比率</strong>：1年以内の支払い余力。<strong>120%以上が目安</strong>。ただし売掛・在庫が膨らんでると「見た目倒れ」になる。</div>
+      <div class="mt-2" style="background:#fef3c7;padding:8px 10px;border-radius:6px;color:#78350f;">💡 <strong>銀行が融資判断で見る順</strong>：①債務超過か→②EBITDAで返せるか→③直近の現金推移→④売掛・在庫の異常。順番を意識すると数字の優先度がわかる。</div>
+    </div>
+  </details>
+
   {# バーンレート #}
   {% if cash_burn %}
-  <h6 class="fw-bold text-muted small mb-3 mt-2"><i class="fas fa-fire me-1 text-danger"></i>バーンレート — 毎月いくら燃えているか</h6>
+  <h6 class="fw-bold text-muted small mb-3 mt-2"><i class="fas fa-fire me-1 text-danger"></i><abbr class="term" title="毎月どれだけ現金が燃えているか。営業赤字＋借入返済の月額換算">バーンレート</abbr> — 毎月いくら燃えているか</h6>
   <div class="row g-3 mb-4">
     {% if cash_burn.operating_monthly is not none %}
     <div class="col-md-4">
@@ -576,7 +597,7 @@
       <div class="col-md-6"><div class="small text-muted">本業黒字化に必要な年間改善額</div><div class="fs-4 fw-bold" style="color:#c2410c;">+{{ "{:,.0f}".format(cash_burn.breakeven_required_yearly) }}万円/年</div></div>
       {% endif %}
       {% if cash_burn.runway_months %}
-      <div class="col-md-6"><div class="small text-muted">現金ベースの資金余力（推計）</div><div class="fs-4 fw-bold" style="color:#c2410c;">約{{ cash_burn.runway_months }}ヶ月</div><div class="small text-muted">※このペースで消えた場合の持続月数</div></div>
+      <div class="col-md-6"><div class="small text-muted"><abbr class="term" title="ランウェイ：今のペースで現金が尽きるまでの月数。6ヶ月切ったら危険水準">現金ベースの資金余力</abbr>（推計）</div><div class="fs-4 fw-bold" style="color:#c2410c;">約{{ cash_burn.runway_months }}ヶ月</div><div class="small text-muted">※このペースで消えた場合の持続月数</div></div>
       {% endif %}
     </div>
   </div>
@@ -613,19 +634,19 @@
   <h6 class="fw-bold text-muted small mb-3 mt-4 pro-only"><i class="fas fa-sync me-1 text-primary"></i>運転資本指標（プロ向け）</h6>
   <div class="card p-3 mb-4 pro-only"><div class="row g-3 small">
     {% if cash_wc.receivables_days %}
-    <div class="col-md-3"><div class="text-muted">売上債権回転期間</div><div class="fs-5 fw-bold">{{ cash_wc.receivables_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.receivables_days }}">{% if cash_wc.labels.receivables_days == 'good' %}良{% elif cash_wc.labels.receivables_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">回転率 {{ cash_wc.receivables_turnover }}回／年</div></div>
+    <div class="col-md-3"><div class="text-muted"><abbr class="term" title="売上が現金になるまでの平均日数。短いほど資金繰りに余裕">売上債権回転期間</abbr></div><div class="fs-5 fw-bold">{{ cash_wc.receivables_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.receivables_days }}">{% if cash_wc.labels.receivables_days == 'good' %}良{% elif cash_wc.labels.receivables_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">回転率 {{ cash_wc.receivables_turnover }}回／年</div></div>
     {% endif %}
     {% if cash_wc.inventory_days %}
-    <div class="col-md-3"><div class="text-muted">在庫回転期間</div><div class="fs-5 fw-bold">{{ cash_wc.inventory_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.inventory_days }}">{% if cash_wc.labels.inventory_days == 'good' %}良{% elif cash_wc.labels.inventory_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">回転率 {{ cash_wc.inventory_turnover }}回／年</div></div>
+    <div class="col-md-3"><div class="text-muted"><abbr class="term" title="在庫を売り切るまでの平均日数。長いほど滞留リスク">在庫回転期間</abbr></div><div class="fs-5 fw-bold">{{ cash_wc.inventory_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.inventory_days }}">{% if cash_wc.labels.inventory_days == 'good' %}良{% elif cash_wc.labels.inventory_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">回転率 {{ cash_wc.inventory_turnover }}回／年</div></div>
     {% endif %}
     {% if cash_wc.ccc_days %}
     <div class="col-md-3"><div class="text-muted"><abbr class="term" title="売掛金になってから現金化するまでの日数。短いほど資金効率が良い">CCC</abbr>（推計）</div><div class="fs-5 fw-bold">{{ cash_wc.ccc_days }}日 <span class="wc-indicator wc-{{ cash_wc.labels.ccc_days }}">{% if cash_wc.labels.ccc_days == 'good' %}良{% elif cash_wc.labels.ccc_days == 'ok' %}普通{% else %}要改善{% endif %}</span></div><div class="text-muted small">買掛金45日仮定</div></div>
     {% endif %}
     {% if cash_wc.debt_equity_ratio %}
-    <div class="col-md-3"><div class="text-muted">負債比率</div><div class="fs-5 fw-bold">{{ cash_wc.debt_equity_ratio }}% <span class="wc-indicator wc-{{ cash_wc.labels.debt_equity_ratio }}">{% if cash_wc.labels.debt_equity_ratio == 'good' %}健全{% elif cash_wc.labels.debt_equity_ratio == 'ok' %}普通{% else %}要注意{% endif %}</span></div><div class="text-muted small">100%以下が健全</div></div>
+    <div class="col-md-3"><div class="text-muted"><abbr class="term" title="負債÷純資産。100%以下が健全、200%超は財務リスク高">負債比率</abbr></div><div class="fs-5 fw-bold">{{ cash_wc.debt_equity_ratio }}% <span class="wc-indicator wc-{{ cash_wc.labels.debt_equity_ratio }}">{% if cash_wc.labels.debt_equity_ratio == 'good' %}健全{% elif cash_wc.labels.debt_equity_ratio == 'ok' %}普通{% else %}要注意{% endif %}</span></div><div class="text-muted small">100%以下が健全</div></div>
     {% endif %}
     {% if cash_wc.cash_months_of_sales %}
-    <div class="col-md-3"><div class="text-muted">月商キャッシュ倍率</div><div class="fs-5 fw-bold">{{ cash_wc.cash_months_of_sales }}ヶ月分</div><div class="text-muted small">現預金を月商で割った値</div></div>
+    <div class="col-md-3"><div class="text-muted"><abbr class="term" title="現預金が月商の何ヶ月分あるか。1.5ヶ月以上が推奨">月商キャッシュ倍率</abbr></div><div class="fs-5 fw-bold">{{ cash_wc.cash_months_of_sales }}ヶ月分</div><div class="text-muted small">現預金を月商で割った値</div></div>
     {% endif %}
   </div></div>
   {% endif %}
@@ -719,6 +740,44 @@
   {% endfor %}
   {% endif %}
 
+  {# 黒字向け節税アドバイス（applicable=true のときのみ） #}
+  {% if result.tax_savings_advice and result.tax_savings_advice.applicable and result.tax_savings_advice.ideas %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-piggy-bank me-1" style="color:#0e7490;"></i>節税 × 投資判断（黒字社向け）</h6>
+  <div class="card p-3 mb-3" style="background:linear-gradient(135deg,#ecfeff,#cffafe);border:1px solid #06b6d4;">
+    {% if result.tax_savings_advice.headline %}
+    <div class="fw-bold mb-2" style="color:#155e75;font-size:1.0rem;">💡 {{ result.tax_savings_advice.headline }}</div>
+    {% endif %}
+    {% if result.tax_savings_advice.strategic_note %}
+    <div class="small mb-3" style="color:#0e7490;">{{ result.tax_savings_advice.strategic_note }}</div>
+    {% endif %}
+    {% for idea in result.tax_savings_advice.ideas %}
+    <div class="card p-3 mb-2" style="border-left:4px solid #06b6d4;background:#fff;">
+      <div class="d-flex justify-content-between align-items-start flex-wrap">
+        <div class="fw-bold" style="color:#0e7490;">{{ idea.title }}</div>
+        {% if idea.category %}<span class="badge" style="background:#06b6d4;color:#fff;">{{ idea.category }}</span>{% endif %}
+      </div>
+      <div class="row g-2 mt-2 small">
+        {% if idea.estimated_tax_save %}
+        <div class="col-md-4"><div class="text-muted" style="font-size:.7rem;">節税効果（推計）</div><div class="fw-bold" style="color:#16a34a;">▲{{ "{:,.0f}".format(idea.estimated_tax_save) }}万円</div></div>
+        {% endif %}
+        {% if idea.investment_required is not none %}
+        <div class="col-md-4"><div class="text-muted" style="font-size:.7rem;">必要投資額</div><div class="fw-bold">{% if idea.investment_required > 0 %}{{ "{:,.0f}".format(idea.investment_required) }}万円{% else %}—（経費化のみ）{% endif %}</div></div>
+        {% endif %}
+        {% if idea.deadline %}
+        <div class="col-md-4"><div class="text-muted" style="font-size:.7rem;">実行タイミング</div><div class="fw-bold">{{ idea.deadline }}</div></div>
+        {% endif %}
+      </div>
+      {% if idea.why %}<div class="small mt-2"><strong>なぜ:</strong> {{ idea.why }}</div>{% endif %}
+      {% if idea.how %}<div class="small mt-1"><strong>どう:</strong> {{ idea.how }}</div>{% endif %}
+      {% if idea.warning %}<div class="small mt-2" style="background:#fef3c7;border-left:3px solid #f59e0b;padding:6px 10px;border-radius:4px;color:#78350f;">⚠️ {{ idea.warning }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>節税効果は実効税率33%での概算。実際の適用可否・効果は税理士への確認が必要です。</div>
+  </div>
+  {% elif result.tax_savings_advice and not result.tax_savings_advice.applicable %}
+  {# 赤字社には何も表示しない（赤字社向けは再生プランで対応） #}
+  {% endif %}
+
   {# アクション提案 #}
   {% if result.actions %}
   <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-tasks me-1" style="color:#1a237e;"></i>アクション提案（次の面談でそのまま話せる具体性）</h6>
@@ -775,6 +834,42 @@
   </div>
   {% endif %}
 
+  {# 提携パートナー紹介（保険・銀行・リース） — 北村先生FB由来の収益化導線 #}
+  {% if result.finance_partners %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-university me-1" style="color:#1e40af;"></i>提携パートナー紹介（金融・保険）</h6>
+  <div class="small text-muted mb-2">財務状況に合わせて、提携先（銀行・保険代理店・認定支援機関・リース会社）への送客を提案。</div>
+  <div class="row g-3 mb-4">
+    {% for fp in result.finance_partners %}
+    <div class="col-md-6">
+      <div class="card h-100 p-3" style="border-left:4px solid #1e40af;">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="badge" style="background:#1e40af;color:#fff;">{{ fp.partner_type }}</span>
+        </div>
+        <div class="fw-bold mt-2">{{ fp.title }}</div>
+        <div class="small text-muted mt-2"><strong>なぜ今:</strong> {{ fp.trigger_reason }}</div>
+        {% if fp.estimated_benefit %}
+        <div class="small mt-2" style="background:#ecfdf5;border-left:3px solid #16a34a;padding:6px 10px;border-radius:4px;color:#065f46;">
+          💰 <strong>期待効果:</strong> {{ fp.estimated_benefit }}
+        </div>
+        {% endif %}
+        {% if fp.next_step %}
+        <div class="small mt-2"><strong>次の一歩:</strong> {{ fp.next_step }}</div>
+        {% endif %}
+        {% if fp.fee_model %}
+        <div class="small text-muted mt-1"><i class="fas fa-info-circle me-1"></i>料金: {{ fp.fee_model }}</div>
+        {% endif %}
+        <div class="mt-2">
+          <a href="/partner-referral?type={{ fp.partner_type|urlencode }}&title={{ fp.title|urlencode }}&client={{ client.id }}" class="btn btn-sm" style="background:#1e40af;color:#fff;border:none;">
+            <i class="fas fa-handshake me-1"></i>パートナーに繋ぐ
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>提携パートナーは認定支援機関・独立系保険代理店等。CoPartner は紹介手数料モデルで運営（顧客側に追加負担なし）。</div>
+  {% endif %}
+
   {# 補助金・助成金マッチング #}
   {% set sub_items = result.subsidies['items'] if result.subsidies else [] %}
   {% set sub_tags = result.subsidies['issue_tags'] if result.subsidies else [] %}
@@ -813,12 +908,17 @@
         </div>
         {% endif %}
         <div class="small text-muted mt-2">💡 {{ s.tip }}</div>
-        <div class="mt-2"><a href="{{ s.url }}" target="_blank" class="btn btn-sm btn-outline-primary">公式情報を見る <i class="fas fa-external-link-alt ms-1"></i></a></div>
+        <div class="mt-2 d-flex gap-2 flex-wrap">
+          <a href="{{ s.url }}" target="_blank" class="btn btn-sm btn-outline-primary">公式情報を見る <i class="fas fa-external-link-alt ms-1"></i></a>
+          <a href="/subsidy-referral?subsidy={{ s.name|urlencode }}&client={{ client.id }}" class="btn btn-sm" style="background:#ea580c;color:#fff;border:none;">
+            <i class="fas fa-handshake me-1"></i>申請代行を依頼
+          </a>
+        </div>
       </div>
     </div>
     {% endfor %}
   </div>
-  <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>適合度はあくまで参考。申請可否は各補助金の詳細要件でご確認ください。CoPartner経由で補助金申請パートナーの紹介も可能（別途ご相談）。</div>
+  <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>適合度はあくまで参考。申請可否は各補助金の詳細要件でご確認ください。「申請代行を依頼」ボタンから CoPartner 提携の補助金申請パートナーへ送客できます（成果報酬型・別途ご相談）。</div>
   {% endif %}
 
   {# ヒアリングシート（3カテゴリ+ 借入明細） #}
