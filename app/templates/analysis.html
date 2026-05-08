@@ -834,6 +834,44 @@
   </div>
   {% endif %}
 
+  {# おすすめサービス（アフィ） #}
+  {% if result.recommended_affiliates %}
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-store me-1" style="color:#0891b2;"></i>おすすめサービス（顧問先に推奨可能なツール・サービス）</h6>
+  <div class="small text-muted mb-2">財務状況・課題タグから自動マッチング。CoPartner提携先に紹介すると、税理士先生に紹介手数料が還元されます。</div>
+  <div class="row g-3 mb-4">
+    {% for aff in result.recommended_affiliates %}
+    <div class="col-md-6">
+      <div class="card h-100 p-3" style="border-left:4px solid {% if aff.match_score >= 70 %}#16a34a{% elif aff.match_score >= 50 %}#0891b2{% else %}#9ca3af{% endif %};">
+        <div class="d-flex justify-content-between align-items-start mb-1">
+          <span class="badge" style="background:#0891b2;color:#fff;">{{ aff.category }}</span>
+          <span class="rank-badge" style="background:#ecfeff;color:#155e75;">適合 {{ aff.match_score }}%</span>
+        </div>
+        <div class="fw-bold mt-2">{{ aff.name }}</div>
+        <div class="small text-muted">{{ aff.vendor }}</div>
+        <div class="small mt-2">{{ aff.description }}</div>
+        {% if aff.match_reasons %}
+        <div class="small mt-2" style="background:#f9fafb;padding:6px 10px;border-radius:4px;">
+          {% for r in aff.match_reasons %}<div>✓ {{ r }}</div>{% endfor %}
+        </div>
+        {% endif %}
+        {% if aff.tax_save_relevant %}
+        <div class="small mt-2"><span class="badge" style="background:#fef3c7;color:#78350f;">節税関連</span></div>
+        {% endif %}
+        <div class="mt-2">
+          <a href="{{ aff.url }}" target="_blank" rel="noopener nofollow" class="btn btn-sm" style="background:#0891b2;color:#fff;border:none;">
+            <i class="fas fa-external-link-alt me-1"></i>詳細・申込
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="small text-muted mb-3" style="background:#f3f4f6;padding:8px 12px;border-radius:4px;">
+    <i class="fas fa-info-circle me-1"></i>
+    <strong>中立性の方針:</strong> マッチング順位は「課題タグ一致度・売上規模・業種・信頼度」のみで決定し、紹介手数料は順序に影響しません。同カテゴリ複数候補は適合度順で表示します。
+  </div>
+  {% endif %}
+
   {# 提携パートナー紹介（保険・銀行・リース） — 北村先生FB由来の収益化導線 #}
   {% if result.finance_partners %}
   <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-university me-1" style="color:#1e40af;"></i>提携パートナー紹介（金融・保険）</h6>

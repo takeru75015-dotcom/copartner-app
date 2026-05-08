@@ -742,6 +742,7 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             fd, cl.name, cl.industry,
             business_details=getattr(cl, "business_details", "") or "",
             historical_data=all_fds_for_client if len(all_fds_for_client) > 1 else None,
+            referral_code=getattr(user, "referral_code", "") or f"tax_{user.id:03d}",
         )
         analysis = Analysis(financial_data_id=fd_id, result_json=json.dumps(result, ensure_ascii=False))
         db.add(analysis); db.commit(); db.refresh(analysis)

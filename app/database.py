@@ -13,6 +13,7 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     display_name = Column(String, default="")
+    referral_code = Column(String, default="", index=True)  # アフィ紹介ID（税理士ごとに発行）
     created_at = Column(DateTime, default=datetime.utcnow)
     clients = relationship("Client", back_populates="owner", cascade="all, delete-orphan")
 

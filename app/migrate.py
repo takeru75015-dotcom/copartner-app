@@ -19,6 +19,19 @@ def migrate():
     # clients.business_details
     _add_column(cursor, "clients", "business_details", "TEXT DEFAULT ''")
 
+    # users.referral_code（アフィ紹介ID）
+    _add_column(cursor, "users", "referral_code", "TEXT DEFAULT ''")
+    # 既存ユーザーに referral_code を発番（空の場合）
+    try:
+        import secrets
+        cursor.execute("SELECT id FROM users WHERE referral_code IS NULL OR referral_code = ''")
+        for (uid,) in cursor.fetchall():
+            code = "tax_" + secrets.token_hex(4)  # tax_ + 8桁hex
+            cursor.execute("UPDATE users SET referral_code = ? WHERE id = ?", (code, uid))
+            print(f"  + assigned referral_code {code} to user {uid}")
+    except sqlite3.OperationalError as e:
+        print(f"  ! referral_code backfill skip: {e}")
+
     # financial_data に B/S 等を追加
     for col, col_def in [
         ("prev_operating_profit", "REAL DEFAULT 0"),
