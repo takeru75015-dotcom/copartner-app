@@ -143,6 +143,8 @@ def derive_issue_tags_from_result(result: Dict, fd) -> List[str]:
         if operating_profit > 1000:
             tags.append("個人住民税控除")
             tags.append("役員退職金準備")
+            tags.append("法人税軽減")  # 企業版ふるさと納税等
+            tags.append("CSR")
 
     # 売掛金多い → 支払サイト改善・キャッシュフロー
     if revenue > 0 and receivables / revenue * 365 > 60:
