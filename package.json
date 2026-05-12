@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  },
+  "scripts": {
+    "test:ui": "playwright test tests/ui_qa.spec.ts",
+    "test:ui:install": "playwright install chromium"
+  }
+}
