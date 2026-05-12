@@ -26,6 +26,7 @@ class Client(Base):
     note = Column(Text, default="")
     # 事業構成詳細（社長からのヒアリング情報）
     business_details = Column(Text, default="")
+    hearing_answers = Column(Text, default="{}")  # 質問ハッシュ → 回答 のJSON
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User", back_populates="clients")
     financials = relationship("FinancialData", back_populates="client", cascade="all, delete-orphan")

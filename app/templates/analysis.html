@@ -182,6 +182,7 @@
   <div class="cp-tab active" data-tab="overview">📋 財務概要</div>
   <div class="cp-tab" data-tab="cash">🔥 キャッシュ診断</div>
   <div class="cp-tab" data-tab="advice">💡 ビジネスアドバイス</div>
+  <div class="cp-tab" data-tab="hearing">❓ 追加質問・ヒアリング</div>
   <div class="cp-tab" data-tab="simulator">🎚️ シミュレーター</div>
 </div>
 
@@ -959,26 +960,66 @@
   <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>適合度はあくまで参考。申請可否は各補助金の詳細要件でご確認ください。「申請代行を依頼」ボタンから CoPartner 提携の補助金申請パートナーへ送客できます（成果報酬型・別途ご相談）。</div>
   {% endif %}
 
-  {# ヒアリングシート（3カテゴリ+ 借入明細） #}
+  {# ヒアリングシートは「追加質問・ヒアリング」タブに移動 #}
+</div>
+
+{# ========== タブ4：追加質問・ヒアリング ========== #}
+<div class="cp-tab-panel" id="panel-hearing">
   {% if result.hearing_sheet %}
-  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-clipboard-list me-1" style="color:#b45309;"></i>税理士ヒアリングシート（社長への確認事項）</h6>
-  <div class="mb-2 small text-muted">以下を社長からヒアリングすることで、アドバイスの精度が大幅に上がります。</div>
-  {% if result.hearing_sheet.business_understanding %}
-  <div class="hearing-cat"><h6>🏢 事業理解</h6>{% for q in result.hearing_sheet.business_understanding %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
-  {% endif %}
-  {% if result.hearing_sheet.customer_market %}
-  <div class="hearing-cat"><h6>👥 顧客・市場</h6>{% for q in result.hearing_sheet.customer_market %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
-  {% endif %}
-  {% if result.hearing_sheet.growth_opportunity %}
-  <div class="hearing-cat"><h6>🚀 成長機会</h6>{% for q in result.hearing_sheet.growth_opportunity %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
-  {% endif %}
-  {% if result.hearing_sheet.debt_and_finance %}
-  <div class="hearing-cat"><h6>💴 借入・財務</h6>{% for q in result.hearing_sheet.debt_and_finance %}<div class="hearing-q">Q. {{ q }}</div>{% endfor %}</div>
-  {% endif %}
+  {% set saved_ans = client.hearing_answers_dict if client.hearing_answers_dict is defined else {} %}
+  <div class="card p-3 mb-3" style="background:linear-gradient(135deg,#fff7ed,#fef3c7);border:1px solid #fb923c;">
+    <h6 class="fw-bold mb-2" style="color:#9a3412;"><i class="fas fa-clipboard-list me-1"></i>税理士ヒアリングシート — 社長への確認事項に回答を記入</h6>
+    <div class="small" style="color:#7c2d12;">回答を保存すると、次回の AI 分析時にコンテキストとして自動反映され、アドバイスの精度が大幅に向上します。すべて任意・部分回答もOK。</div>
+  </div>
+
+  <form method="post" action="/clients/{{ client.id }}/save-hearing">
+    <input type="hidden" name="fd_id" value="{{ fd.id }}">
+
+    {% set categories = [
+      ('business_understanding', '🏢 事業理解', 'hearing_sheet.business_understanding'),
+      ('customer_market', '👥 顧客・市場', 'hearing_sheet.customer_market'),
+      ('growth_opportunity', '🚀 成長機会', 'hearing_sheet.growth_opportunity'),
+      ('debt_and_finance', '💴 借入・財務', 'hearing_sheet.debt_and_finance')
+    ] %}
+
+    {% for cat_key, cat_label, cat_path in categories %}
+      {% set questions = result.hearing_sheet[cat_key] if result.hearing_sheet[cat_key] is defined else [] %}
+      {% if questions %}
+      <div class="card mb-3 p-3">
+        <h6 class="fw-bold mb-3" style="color:#b45309;">{{ cat_label }}</h6>
+        {% for q in questions %}
+          {% set q_hash = (cat_key ~ '_' ~ loop.index)|string %}
+          <div class="mb-3">
+            <div class="small fw-semibold mb-1" style="color:#374151;">Q{{ loop.index }}. {{ q }}</div>
+            <textarea name="ans_{{ q_hash }}" class="form-control form-control-sm" rows="2"
+              placeholder="社長からの回答をここに記入（未回答は空欄でOK）">{{ saved_ans.get(q_hash, '') }}</textarea>
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endfor %}
+
+    <div class="card p-3 mb-3 text-center">
+      <div class="d-flex justify-content-center gap-2">
+        <button type="submit" class="btn btn-primary btn-lg" style="background:#b45309;border-color:#b45309;">
+          <i class="fas fa-save me-1"></i>回答を保存
+        </button>
+        <button type="submit" formaction="/clients/{{ client.id }}/save-hearing-and-reanalyze" class="btn btn-success btn-lg">
+          <i class="fas fa-sync me-1"></i>保存して再分析
+        </button>
+      </div>
+      <div class="small text-muted mt-2">「保存して再分析」で、回答をコンテキストに含めた新しい分析結果が生成されます（数十秒〜2分）</div>
+    </div>
+  </form>
+  {% else %}
+  <div class="card p-3 text-center text-muted">
+    <i class="fas fa-info-circle me-1"></i>このクライアントには現時点でAI生成のヒアリング質問がありません。<br>
+    （業界判定の信頼度が高く、追加情報が不要と判断されたか、再分析が必要です）
+  </div>
   {% endif %}
 </div>
 
-{# ========== タブ4：改善シミュレーター ========== #}
+{# ========== タブ5：改善シミュレーター ========== #}
 <div class="cp-tab-panel" id="panel-simulator">
   <h6 class="fw-bold mb-3"><i class="fas fa-sliders-h me-2 text-primary"></i>改善シミュレーター — スライダーで「もしこうしたら」を試す</h6>
   <div class="small text-muted mb-3">各項目を動かすと、営業利益・スコアの変化が即座に計算されます。

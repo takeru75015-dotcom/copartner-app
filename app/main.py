@@ -702,6 +702,12 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
     if not cl:
         return RedirectResponse("/dashboard", status_code=302)
 
+    # ヒアリング回答（dict 化してテンプレに渡す）
+    try:
+        cl.hearing_answers_dict = json.loads(cl.hearing_answers or "{}")
+    except Exception:
+        cl.hearing_answers_dict = {}
+
     # 内訳データ parse（template で使用）
     try:
         breakdown = json.loads(fd.breakdown_json or "{}")
@@ -738,9 +744,23 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
         all_fds_for_client = _sorted[: _idx + 1]
 
     try:
+        # 保存されたヒアリング回答を business_details に追記（AI に文脈として渡す）
+        base_bd = getattr(cl, "business_details", "") or ""
+        hearing_text = ""
+        try:
+            ans_dict = json.loads(getattr(cl, "hearing_answers", "{}") or "{}")
+            if ans_dict:
+                lines = ["", "【社長からのヒアリング回答】"]
+                for q_hash, ans in ans_dict.items():
+                    lines.append(f"- {ans}")
+                hearing_text = "\n".join(lines)
+        except Exception:
+            pass
+        merged_bd = (base_bd + hearing_text).strip()
+
         result = analyze_financials(
             fd, cl.name, cl.industry,
-            business_details=getattr(cl, "business_details", "") or "",
+            business_details=merged_bd,
             historical_data=all_fds_for_client if len(all_fds_for_client) > 1 else None,
             referral_code=getattr(user, "referral_code", "") or f"tax_{user.id:03d}",
         )
@@ -759,6 +779,47 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda,
             "error": str(e), "cached": False, "analysis_id": None
         })
+
+async def _save_hearing_form(client_id: int, request: Request, db: Session):
+    user = get_current_user(request, db)
+    if not user:
+        return None, None, None, RedirectResponse("/login", status_code=302)
+    cl = db.query(Client).filter(Client.id == client_id, Client.user_id == user.id).first()
+    if not cl:
+        return None, None, None, RedirectResponse("/dashboard", status_code=302)
+    form = await request.form()
+    answers = {}
+    for key, val in form.items():
+        if key.startswith("ans_") and str(val).strip():
+            answers[key[4:]] = str(val).strip()
+    cl.hearing_answers = json.dumps(answers, ensure_ascii=False)
+    db.commit()
+    return user, cl, form.get("fd_id", ""), None
+
+
+@app.post("/clients/{client_id}/save-hearing")
+async def save_hearing_answers(client_id: int, request: Request, db: Session = Depends(get_db)):
+    """ヒアリング質問への回答を保存（次回分析で business_details に追記される）"""
+    user, cl, fd_id, redir = await _save_hearing_form(client_id, request, db)
+    if redir:
+        return redir
+    if fd_id:
+        return RedirectResponse(f"/financials/{fd_id}/analyze#panel-hearing", status_code=302)
+    return RedirectResponse(f"/clients/{client_id}", status_code=302)
+
+
+@app.post("/clients/{client_id}/save-hearing-and-reanalyze")
+async def save_hearing_and_reanalyze(client_id: int, request: Request, db: Session = Depends(get_db)):
+    """ヒアリング保存 → 既存分析を削除 → 再分析画面へリダイレクト"""
+    user, cl, fd_id, redir = await _save_hearing_form(client_id, request, db)
+    if redir:
+        return redir
+    if fd_id:
+        db.query(Analysis).filter(Analysis.financial_data_id == int(fd_id)).delete()
+        db.commit()
+        return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+    return RedirectResponse(f"/clients/{client_id}", status_code=302)
+
 
 @app.post("/financials/{fd_id}/reanalyze")
 def reanalyze(fd_id: int, request: Request, db: Session = Depends(get_db)):
