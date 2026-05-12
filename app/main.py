@@ -1,4 +1,5 @@
 import json
+import hashlib
 from fastapi import FastAPI, Request, Form, Depends, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +29,14 @@ BASE_DIR = Path(__file__).parent
 app = FastAPI(title="財務KPI分析 for 税理士")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _md5_short(s) -> str:
+    """質問テキスト等の文字列から安定した短いハッシュを生成（ヒアリング回答キーで使用）"""
+    return hashlib.md5(str(s).encode("utf-8")).hexdigest()[:10]
+
+
+templates.env.filters["md5_short"] = _md5_short
 
 @app.on_event("startup")
 def startup():
@@ -815,9 +824,16 @@ async def save_hearing_and_reanalyze(client_id: int, request: Request, db: Sessi
     if redir:
         return redir
     if fd_id:
-        db.query(Analysis).filter(Analysis.financial_data_id == int(fd_id)).delete()
+        # ★ 所有者検証: fd_id が この user の client に属することを確認（IDOR対策）
+        fd = db.query(FinancialData).filter(
+            FinancialData.id == int(fd_id),
+            FinancialData.client_id == cl.id,
+        ).first()
+        if not fd:
+            return RedirectResponse(f"/clients/{client_id}", status_code=302)
+        db.query(Analysis).filter(Analysis.financial_data_id == fd.id).delete()
         db.commit()
-        return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+        return RedirectResponse(f"/financials/{fd.id}/analyze", status_code=302)
     return RedirectResponse(f"/clients/{client_id}", status_code=302)
 
 
@@ -826,9 +842,18 @@ def reanalyze(fd_id: int, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=302)
-    db.query(Analysis).filter(Analysis.financial_data_id == fd_id).delete()
+    # ★ 所有者検証: FinancialData → Client.user_id で join し、user所有か確認（IDOR対策）
+    fd = (
+        db.query(FinancialData)
+        .join(Client, Client.id == FinancialData.client_id)
+        .filter(FinancialData.id == fd_id, Client.user_id == user.id)
+        .first()
+    )
+    if not fd:
+        return RedirectResponse("/dashboard", status_code=302)
+    db.query(Analysis).filter(Analysis.financial_data_id == fd.id).delete()
     db.commit()
-    return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+    return RedirectResponse(f"/financials/{fd.id}/analyze", status_code=302)
 
 
 @app.get("/partner-referral", response_class=HTMLResponse)

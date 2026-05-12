@@ -988,11 +988,14 @@
       <div class="card mb-3 p-3">
         <h6 class="fw-bold mb-3" style="color:#b45309;">{{ cat_label }}</h6>
         {% for q in questions %}
-          {% set q_hash = (cat_key ~ '_' ~ loop.index)|string %}
+          {# 質問テキストのMD5を使った安定キー。質問が並び替わっても回答が別質問に紐付かない #}
+          {% set q_hash = (cat_key ~ '_' ~ (q|md5_short))|string %}
+          {# 旧キー（cat_key + loop.index）からのフォールバック読み取り。保存時に新キーで上書き=自動マイグレーション #}
+          {% set legacy_q_hash = (cat_key ~ '_' ~ loop.index)|string %}
           <div class="mb-3">
             <div class="small fw-semibold mb-1" style="color:#374151;">Q{{ loop.index }}. {{ q }}</div>
             <textarea name="ans_{{ q_hash }}" class="form-control form-control-sm" rows="2"
-              placeholder="社長からの回答をここに記入（未回答は空欄でOK）">{{ saved_ans.get(q_hash, '') }}</textarea>
+              placeholder="社長からの回答をここに記入（未回答は空欄でOK）">{{ saved_ans.get(q_hash, saved_ans.get(legacy_q_hash, '')) }}</textarea>
           </div>
         {% endfor %}
       </div>

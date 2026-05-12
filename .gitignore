@@ -16,6 +16,11 @@ venv/
 .env
 .env.*
 !.env.example
+dev access*.txt
+dev_access*.txt
+*token*.txt
+*secret*.txt
+*credential*.txt
 
 # OS
 .DS_Store
