@@ -64,6 +64,40 @@
           </button>
         </form>
       </div>
+
+      {# 北村先生FB#4対応：元帳・固定資産台帳・補助元帳 #}
+      <div class="border-top pt-3 mt-3" style="background:#fef9c3;border-radius:8px;padding:14px;margin:14px -14px -14px;">
+        <div class="small fw-semibold mb-2" style="color:#854d0e;"><i class="fas fa-book me-1"></i>元帳・台帳のアップロード（ヒアリング質問を自動回答化）</div>
+        <div class="small text-muted mb-3">総勘定元帳・固定資産台帳・補助元帳を AI が読み取り、社長への質問の多くを自動で埋めます（北村先生FB対応）。</div>
+
+        <div class="row g-2">
+          <div class="col-md-4">
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="ledger">
+              <div class="small fw-semibold mb-1" style="color:#92400e;">📒 総勘定元帳</div>
+              <input type="file" name="file" class="form-control form-control-sm mb-2" accept=".pdf" required>
+              <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fas fa-magic me-1"></i>読取＆追記</button>
+            </form>
+          </div>
+          <div class="col-md-4">
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="fixed_assets">
+              <div class="small fw-semibold mb-1" style="color:#92400e;">🏗 固定資産台帳</div>
+              <input type="file" name="file" class="form-control form-control-sm mb-2" accept=".pdf" required>
+              <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fas fa-magic me-1"></i>読取＆追記</button>
+            </form>
+          </div>
+          <div class="col-md-4">
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="aux_ledger">
+              <div class="small fw-semibold mb-1" style="color:#92400e;">📋 補助元帳（売掛/買掛/借入）</div>
+              <input type="file" name="file" class="form-control form-control-sm mb-2" accept=".pdf" required>
+              <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fas fa-magic me-1"></i>読取＆追記</button>
+            </form>
+          </div>
+        </div>
+        <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>読み取った内容は事業構成テキストに追記され、次回 AI 分析時にコンテキストとして自動反映されます。</div>
+      </div>
     </div>
   </div>
 </div>

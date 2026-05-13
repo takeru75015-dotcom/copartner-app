@@ -162,11 +162,35 @@
 
 {% elif result %}
 
-{# ========== Key Insight（最重要ポイント） ========== #}
+{# ========== Key Insight（プロモード） ========== #}
 {% if result.key_insight %}
-<div class="key-insight">
-  <div class="key-insight-label">💡 最重要ポイント</div>
+<div class="key-insight pro-only">
+  <div class="key-insight-label">💡 最重要ポイント（プロ向け）</div>
   <div class="key-insight-text">{{ result.key_insight }}</div>
+</div>
+{% endif %}
+
+{# ========== 社長向け1ページサマリ（社長モード） ========== #}
+{% if result.owner_message or result.owner_what_to_do %}
+<div class="card mb-4" style="background:linear-gradient(135deg,#fef9c3,#fef08a);border:3px solid #ca8a04;border-radius:16px;padding:24px;">
+  <div class="d-flex align-items-center mb-3">
+    <span style="font-size:2rem;margin-right:12px;">👔</span>
+    <div>
+      <div class="fw-bold" style="color:#854d0e;font-size:.85rem;letter-spacing:.1em;">社長へのメッセージ</div>
+      <div class="small text-muted">専門用語抜きの易しい言葉で</div>
+    </div>
+  </div>
+  {% if result.owner_message %}
+  <div style="font-size:1.15rem;line-height:1.7;color:#713f12;font-weight:600;margin-bottom:16px;">
+    {{ result.owner_message }}
+  </div>
+  {% endif %}
+  {% if result.owner_what_to_do %}
+  <div style="background:#fff;border-radius:8px;padding:14px 18px;border-left:5px solid #16a34a;">
+    <div class="small fw-bold" style="color:#15803d;letter-spacing:.05em;">✅ 今すぐやること</div>
+    <div style="font-size:1.05rem;color:#14532d;margin-top:6px;line-height:1.6;">{{ result.owner_what_to_do }}</div>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -489,7 +513,16 @@
   {# 業界ベンチマーク — プロ向け #}
   {% if result.benchmark and result.benchmark.comparisons %}
   <div class="card p-3 mb-4 pro-only">
-    <h6 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2 text-primary"></i>業界ベンチマーク比較 — {{ result.benchmark.industry_name }}</h6>
+    <h6 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2 text-primary"></i>業界ベンチマーク比較 — {{ result.benchmark.industry_name }}
+      {% if result.benchmark.scale_tier_label %}
+      <span class="badge ms-2" style="background:#3b82f6;color:#fff;font-size:.65rem;">{{ result.benchmark.scale_tier_label }}</span>
+      {% endif %}
+    </h6>
+    {% if result.benchmark.scale_tier %}
+    <div class="small mb-3" style="background:#eff6ff;border-left:3px solid #3b82f6;padding:6px 10px;border-radius:4px;color:#1e3a8a;">
+      <i class="fas fa-info-circle me-1"></i>各指標には <strong>規模帯補正中央値</strong> も併記しています。小規模企業と大企業を同じ平均で比較するのは不正確なため、{{ result.benchmark.scale_tier_range }} の参考値を別途表示。
+    </div>
+    {% endif %}
     {% for c in result.benchmark.comparisons %}
     {# カード型：自社・中央値・上位25% を並べて色分け #}
     {% set mparts = c.metric.split('（', 1) %}
@@ -511,9 +544,15 @@
           <div class="val">{{ c.self_value }}<span style="font-size:.7em;color:#6b7280;">{{ c.unit }}</span></div>
         </div>
         <div class="bench-num">
-          <div class="label">業界中央値</div>
+          <div class="label">業界中央値（全規模）</div>
           <div class="val">{{ c.median }}<span style="font-size:.7em;color:#6b7280;">{{ c.unit }}</span></div>
         </div>
+        {% if c.scale_adjusted_median is defined %}
+        <div class="bench-num" style="background:#eff6ff;border-radius:6px;">
+          <div class="label" style="color:#1e40af;">同規模中央値<br><span style="font-size:.65em;">{{ c.scale_tier }}</span></div>
+          <div class="val" style="color:#1e40af;">{{ c.scale_adjusted_median }}<span style="font-size:.7em;color:#3b82f6;">{{ c.unit }}</span></div>
+        </div>
+        {% endif %}
         <div class="bench-num">
           <div class="label">業界上位25%</div>
           <div class="val">{{ c.top25 }}<span style="font-size:.7em;color:#6b7280;">{{ c.unit }}</span></div>
@@ -531,9 +570,35 @@
   </div>
   {% endif %}
 
+  {# 他社と比較した強み（北村先生FB対応） #}
+  {% if result.competitive_strengths %}
+  <div class="card p-3 mb-4" style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #22c55e;">
+    <h6 class="fw-bold mb-3" style="color:#15803d;"><i class="fas fa-trophy me-2"></i>他社と比較した強み <span class="small text-muted">（社長に自信を持って話せる材料）</span></h6>
+    <div class="row g-2">
+      {% for cs in result.competitive_strengths %}
+      <div class="col-md-6">
+        <div class="p-3" style="background:#fff;border-radius:8px;border-left:4px solid {% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <span class="fw-bold" style="color:#15803d;">{{ cs.title }}</span>
+            <span class="badge" style="background:{% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};color:#fff;">{{ cs.gap }}</span>
+          </div>
+          <div class="d-flex gap-3 mt-2 small">
+            <div><span class="text-muted">自社</span> <span class="fw-bold">{{ cs.self_value }}</span></div>
+            <div><span class="text-muted">業界中央値</span> {{ cs.industry_median }}</div>
+            <div><span class="text-muted">上位25%</span> {{ cs.industry_top25 }}</div>
+          </div>
+          <div class="small mt-2" style="color:#166534;">💬 {{ cs.narrative }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>業界比較データに基づく強みの自動抽出。社長は他社の数字を知らないことが多いので、ここを共有するだけで「自社の良いところ」を実感してもらえます。</div>
+  </div>
+  {% endif %}
+
   {# 強み・課題 #}
   <div class="row g-4 mb-4">
-    <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-thumbs-up me-2 text-success"></i>強み</h6>{% for s in result.strengths %}<div class="strength-item">{{ s }}</div>{% endfor %}</div></div>
+    <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-thumbs-up me-2 text-success"></i>強み（AI 総合評価）</h6>{% for s in result.strengths %}<div class="strength-item">{{ s }}</div>{% endfor %}</div></div>
     <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-exclamation-circle me-2 text-danger"></i>課題・リスク</h6>{% for issue in result.issues %}<div class="issue-item">{{ issue }}</div>{% endfor %}</div></div>
   </div>
 </div>

@@ -363,6 +363,49 @@ def cleanup_duplicates(client_id: int, request: Request, db: Session = Depends(g
     return RedirectResponse(f"/clients/{client_id}?msg=正規化＆マージ完了：{merged_count}期グループ、{deleted_count}レコード削除", status_code=302)
 
 
+@app.post("/clients/{client_id}/upload-ledger")
+async def upload_ledger(client_id: int, request: Request,
+                         file: UploadFile = File(...),
+                         doc_type: str = Form("ledger"),
+                         db: Session = Depends(get_db)):
+    """元帳・固定資産台帳・補助元帳 PDF/Excel を読み取り business_details に要約追記
+    doc_type: ledger / fixed_assets / aux_ledger
+    """
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    cl = db.query(Client).filter(Client.id == client_id, Client.user_id == user.id).first()
+    if not cl:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    type_labels = {
+        "ledger": "総勘定元帳",
+        "fixed_assets": "固定資産台帳",
+        "aux_ledger": "補助元帳",
+    }
+    label = type_labels.get(doc_type, "元帳")
+
+    try:
+        content = await file.read()
+        if AI_PROVIDER != "claude":
+            return RedirectResponse(
+                f"/clients/{client_id}?err=資料の自動読取は Claude 切替時のみ対応しています",
+                status_code=302,
+            )
+        # extract_business_context_from_pdf を doc_type に応じたコンテキストで呼び出す
+        from .claude_client import extract_ledger_summary_from_pdf
+        extracted = extract_ledger_summary_from_pdf(content, file.filename, doc_type=doc_type)
+        stamp = f"\n\n--- {label}（{file.filename}）から自動抽出 ---\n"
+        cl.business_details = (cl.business_details or "") + stamp + extracted
+        db.commit()
+    except Exception as e:
+        return RedirectResponse(
+            f"/clients/{client_id}?err={label}読取失敗: {str(e)[:100]}",
+            status_code=302,
+        )
+    return RedirectResponse(f"/clients/{client_id}?ok={label}を読み取りました", status_code=302)
+
+
 @app.post("/clients/{client_id}/upload-context")
 async def upload_business_context(client_id: int, request: Request,
                                    file: UploadFile = File(...),
