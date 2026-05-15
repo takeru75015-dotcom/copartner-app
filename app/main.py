@@ -880,7 +880,7 @@ async def save_hearing_and_reanalyze(client_id: int, request: Request, db: Sessi
     return RedirectResponse(f"/clients/{client_id}", status_code=302)
 
 
-@app.post("/financials/{fd_id}/reanalyze")
+@app.api_route("/financials/{fd_id}/reanalyze", methods=["GET", "POST"])
 def reanalyze(fd_id: int, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:

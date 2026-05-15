@@ -8,6 +8,7 @@
   .mode-switch button { border: none; background: transparent; padding: 6px 16px; border-radius: 99px; font-size: .8rem; font-weight: 700; cursor: pointer; color: #6b7280; transition: all .15s; }
   .mode-switch button.active { background: #1a237e; color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.15); }
   body.mode-simple .pro-only { display: none !important; }
+  body:not(.mode-simple) .simple-only { display: none !important; }
 
   /* ========== タブ ========== */
   .cp-tabs { border-bottom: 2px solid #e5e7eb; display: flex; gap: 0; margin-bottom: 24px; }
@@ -530,7 +531,10 @@
     {% set mnote = (mparts[1][:-1] if mparts|length > 1 and mparts[1].endswith('）') else (mparts[1] if mparts|length > 1 else '')) %}
     <div class="bench-card rank-{{ c.rank }}">
       <div class="bench-card-head">
-        <div class="bench-card-title">{{ mmain }}{% if mnote %}<span class="term-note">（{{ mnote }}）</span>{% endif %}</div>
+        <div class="bench-card-title">
+          <span class="simple-only">{{ c.metric_owner_label or mmain }}</span>
+          <span class="pro-only">{{ mmain }}{% if mnote %}<span class="term-note">（{{ mnote }}）</span>{% endif %}</span>
+        </div>
         <span class="rank-badge rank-{{ c.rank }}">
           {% if c.rank == 'top25' %}✨ 上位25%
           {% elif c.rank == 'above_median' %}⬆ 中央値超
@@ -579,7 +583,10 @@
       <div class="col-md-6">
         <div class="p-3" style="background:#fff;border-radius:8px;border-left:4px solid {% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};">
           <div class="d-flex justify-content-between align-items-start mb-1">
-            <span class="fw-bold" style="color:#15803d;">{{ cs.title }}</span>
+            <span class="fw-bold" style="color:#15803d;">
+              <span class="simple-only">{% if cs.owner_metric %}{{ cs.owner_metric }}が業界{% if cs.rank == 'top25' %}上位25%{% else %}中央値超{% endif %}{% else %}{{ cs.title }}{% endif %}</span>
+              <span class="pro-only">{{ cs.metric }}が業界{% if cs.rank == 'top25' %}上位25%{% else %}中央値超{% endif %}</span>
+            </span>
             <span class="badge" style="background:{% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};color:#fff;">{{ cs.gap }}</span>
           </div>
           <div class="d-flex gap-3 mt-2 small">
@@ -1044,7 +1051,9 @@
       ('business_understanding', '🏢 事業理解', 'hearing_sheet.business_understanding'),
       ('customer_market', '👥 顧客・市場', 'hearing_sheet.customer_market'),
       ('growth_opportunity', '🚀 成長機会', 'hearing_sheet.growth_opportunity'),
-      ('debt_and_finance', '💴 借入・財務', 'hearing_sheet.debt_and_finance')
+      ('debt_and_finance', '💴 借入・財務', 'hearing_sheet.debt_and_finance'),
+      ('regulations_and_compensation', '📜 規程・役員報酬', 'hearing_sheet.regulations_and_compensation'),
+      ('sales_and_marketing', '📣 営業・マーケティング', 'hearing_sheet.sales_and_marketing')
     ] %}
 
     {% for cat_key, cat_label, cat_path in categories %}

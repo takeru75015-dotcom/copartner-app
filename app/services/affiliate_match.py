@@ -205,6 +205,40 @@ def derive_issue_tags_from_result(result: Dict, fd) -> List[str]:
     if bench.get("overall_position") in ("below_median", "bottom") and employees >= 5:
         tags.append("属人化解消")
 
+    # 営業代行・Webマーケ候補：新規開拓ニーズ＋営業体制が弱いと推察される場合
+    # - 売上が横ばい/減少 or 顧客集中度高い → 新規開拓必要
+    # - 売上規模に対して営業人数が見えない（人件費明細から推測困難）→ 営業体制弱い可能性
+    issues_list = result.get("issues", []) if isinstance(result, dict) else []
+    issues_text = " ".join(issues_list) if isinstance(issues_list, list) else ""
+    if any(kw in issues_text for kw in ["顧客集中", "依存", "横ばい", "減少", "新規開拓", "営業"]):
+        tags.append("新規開拓")
+        tags.append("売上向上")
+        tags.append("営業体制弱い")
+        tags.append("顧客分散")
+        # B2B寄り判定（業種に建設・卸・製造・コンサル等）
+        if any(kw in (industry_text or "") for kw in ["建設", "卸", "製造", "コンサル", "調査", "測量", "IT", "ソフトウェア", "サービス"]) \
+           if 'industry_text' in dir() else False:
+            tags.append("B2B")
+    # 単純に建設・調査・専門サービス業ならB2B強制
+    # （argsで industry が来てないので呼び出し側で結合する設計だが、ここでは結果のbenchmark.industry_nameを使う）
+    ind_name = bench.get("industry_name", "") if isinstance(bench, dict) else ""
+    if any(kw in ind_name for kw in ["建設", "卸", "製造", "コンサル", "サービス業", "情報通信"]):
+        tags.append("B2B")
+
+    # Web集客弱い：売上規模に対してマーケティング費が少ない（販管費明細で「広告宣伝費」が薄い）
+    breakdown = getattr(fd, "breakdown_dict", None) or {}
+    sed = breakdown.get("selling_expenses_detail", []) if isinstance(breakdown, dict) else []
+    ad_total = 0
+    for item in sed if isinstance(sed, list) else []:
+        name = str(item.get("name", "") if isinstance(item, dict) else "")
+        if "広告" in name or "宣伝" in name or "マーケ" in name or "販促" in name:
+            try:
+                ad_total += float(item.get("amount", 0))
+            except Exception:
+                pass
+    if revenue > 5000 and ad_total < revenue * 0.005:  # 売上の0.5%未満なら Web 集客弱い
+        tags.append("Web集客弱い")
+
     return list(dict.fromkeys(tags))  # 重複除去（順序保持）
 
 

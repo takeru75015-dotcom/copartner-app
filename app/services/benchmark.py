@@ -255,6 +255,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         # 一般目安: 30日以下=良、45日=普通、60日超=要改善、90日超=危険
         comparisons.append({
             "metric": "売上債権回転期間（売掛金が現金になるまでの日数）",
+            "metric_owner_label": "売掛金が現金になるまでの日数",
             "self_value": round(rec_days, 1),
             "median": 45.0,
             "top25": 30.0,
@@ -281,6 +282,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         inv_days = inventory / cost_of_sales * 365
         comparisons.append({
             "metric": "在庫回転期間（仕入れから売れるまでの日数）",
+            "metric_owner_label": "在庫が売れるまでの日数",
             "self_value": round(inv_days, 1),
             "median": 45.0,
             "top25": 30.0,
@@ -307,6 +309,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         debt_equity = total_liabilities / equity * 100
         comparisons.append({
             "metric": "負債比率（借金が自己資金の何倍か）",
+            "metric_owner_label": "借金が自分のお金の何倍か",
             "self_value": round(debt_equity, 1),
             "median": 100.0,
             "top25": 50.0,
@@ -359,6 +362,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
 
         comparisons.append({
             "metric": "流動比率（短期支払い余力）",
+            "metric_owner_label": "短期の支払い余力",
             "self_value": round(current_ratio, 1),
             "median": 150.0,
             "top25": 200.0,
@@ -424,6 +428,7 @@ def _build_comparison(metric: str, self_value: float, median: float, top25: floa
 
     return {
         "metric": metric,
+        "metric_owner_label": to_owner_label(metric),
         "self_value": round(self_value, 1),
         "median": median,
         "top25": top25,
@@ -432,6 +437,28 @@ def _build_comparison(metric: str, self_value: float, median: float, top25: floa
         "gap_to_median": round(gap, 1),
         "comment": comment,
     }
+
+
+
+# 社長向け言い換え辞書（北村先生FB対応・専門用語→日常語）
+METRIC_OWNER_LABELS = {
+    "粗利率": "仕入れを引いた利益率",
+    "営業利益率": "本業のもうけの割合",
+    "自己資本比率": "自分のお金で経営してる割合",
+    "流動比率": "短期の支払い余力",
+    "負債比率": "借金が自分のお金の何倍か",
+    "売上債権回転期間": "売掛金が現金になるまでの日数",
+    "在庫回転期間": "在庫が売れるまでの日数",
+    "EBITDA": "本業の現金生成力",
+    "運転資本": "日々の運営に必要なお金",
+    "CCC": "現金が戻ってくるサイクル",
+}
+
+
+def to_owner_label(metric: str) -> str:
+    """専門用語を社長向け易しい言葉に変換。括弧書きは外す。"""
+    base = metric.split("（")[0].strip()
+    return METRIC_OWNER_LABELS.get(base, base)
 
 
 def extract_competitive_strengths(benchmark: Dict, fd=None) -> List[Dict]:
@@ -468,22 +495,25 @@ def extract_competitive_strengths(benchmark: Dict, fd=None) -> List[Dict]:
         top25 = c.get("top25")
         unit = c.get("unit", "")
 
+        owner_metric = to_owner_label(metric)
+
         if rank == "top25":
             narrative = (
-                f"{metric}は業界上位25%水準。"
+                f"{owner_metric}は業界上位25%水準。"
                 f"同業の半分以上はあなたの数字に届いていません。"
-                f"「{metric} {self_val}{unit}」は社長との会話で誇れる材料。"
+                f"「{owner_metric} {self_val}{unit}」は社長との会話で誇れる材料。"
             )
         else:  # above_median
             narrative = (
-                f"{metric}は業界中央値を上回る。"
+                f"{owner_metric}は業界中央値を上回る。"
                 f"同業の半分より良い数字。"
                 f"上位25%（{top25}{unit}）まではあと {top25 - self_val:+.1f}{unit}。"
             )
 
         out.append({
-            "title": f"{metric}が業界{'上位25%' if rank == 'top25' else '中央値超'}",
+            "title": f"{owner_metric}が業界{'上位25%' if rank == 'top25' else '中央値超'}",
             "metric": metric,
+            "owner_metric": owner_metric,
             "self_value": f"{self_val}{unit}",
             "industry_median": f"{median}{unit}",
             "industry_top25": f"{top25}{unit}",
