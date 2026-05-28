@@ -204,14 +204,14 @@
 
 {# ========== タブ切替 ========== #}
 <div class="cp-tabs" id="cpTabs">
-  <div class="cp-tab active" data-tab="overview">📊 数値サマリー</div>
-  <div class="cp-tab" data-tab="advice">💡 ビジネスアドバイス</div>
+  <div class="cp-tab active" data-tab="advice">💡 提案・打ち手</div>
+  <div class="cp-tab" data-tab="overview">📊 数字の詳細</div>
   <div class="cp-tab" data-tab="hearing">❓ 追加質問・ヒアリング</div>
   <div class="cp-tab" data-tab="simulator">🎚️ シミュレーター</div>
 </div>
 
 {# ========== タブ1：財務概要 ========== #}
-<div class="cp-tab-panel active" id="panel-overview">
+<div class="cp-tab-panel" id="panel-overview">
 
   {# ヒアリング質問（業種判定要確認） #}
   {% if result.industry_confidence == 'low' and result.hearing_sheet %}
@@ -279,9 +279,11 @@
   </div>
 
   {# PL: 費用詳細トグル + 円グラフ #}
-  {% if breakdown and (breakdown.selling_expenses_detail or breakdown.cost_of_sales_detail) %}
+  {% set sed_raw = (breakdown.selling_expenses_detail if breakdown else None) %}
+  {% set sed = sed_raw if (sed_raw is iterable and sed_raw is not mapping and sed_raw is not string) else [] %}
+  {% if sed and sed|length > 0 %}
   <details class="card p-3 mb-4">
-    <summary class="fw-bold" style="cursor:pointer;color:#1e3a8a;"><i class="fas fa-chart-pie me-2"></i>費用の内訳を見る（売上原価・販管費）</summary>
+    <summary class="fw-bold" style="cursor:pointer;color:#1e3a8a;"><i class="fas fa-chart-pie me-2"></i>費用の内訳を見る（販管費）</summary>
     <div class="row g-3 mt-3">
       <div class="col-md-6">
         <canvas id="costPie" style="max-height:280px;"></canvas>
@@ -290,10 +292,9 @@
         <div class="small fw-bold text-muted mb-2">📋 販管費 内訳 TOP10</div>
         <table class="table table-sm">
           <tbody>
-          {% set sed = breakdown.selling_expenses_detail or [] %}
-          {% for item in sed[:10] %}
+          {% for item in (sed|list)[:10] %}
           <tr>
-            <td class="small">{{ item.name }}</td>
+            <td class="small">{{ item.name if item.name is defined else item }}</td>
             <td class="small text-end fw-bold">{{ "{:,.0f}".format(item.amount or 0) }}万円</td>
             <td class="small text-end text-muted">{% if fd.revenue %}{{ "%.1f"|format((item.amount or 0) / fd.revenue * 100) }}%{% endif %}</td>
           </tr>
@@ -640,37 +641,9 @@
   </div>
   {% endif %}
 
-  {# 他社と比較した強み（北村先生FB対応） #}
-  {% if result.competitive_strengths %}
-  <div class="card p-3 mb-4" style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #22c55e;">
-    <h6 class="fw-bold mb-3" style="color:#15803d;"><i class="fas fa-trophy me-2"></i>他社と比較した強み <span class="small text-muted">（社長に自信を持って話せる材料）</span></h6>
-    <div class="row g-2">
-      {% for cs in result.competitive_strengths %}
-      <div class="col-md-6">
-        <div class="p-3" style="background:#fff;border-radius:8px;border-left:4px solid {% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};">
-          <div class="d-flex justify-content-between align-items-start mb-1">
-            <span class="fw-bold" style="color:#15803d;">
-              <span class="simple-only">{% if cs.owner_metric %}{{ cs.owner_metric }}が業界{% if cs.rank == 'top25' %}上位25%{% else %}中央値超{% endif %}{% else %}{{ cs.title }}{% endif %}</span>
-              <span class="pro-only">{{ cs.metric }}が業界{% if cs.rank == 'top25' %}上位25%{% else %}中央値超{% endif %}</span>
-            </span>
-            <span class="badge" style="background:{% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};color:#fff;">{{ cs.gap }}</span>
-          </div>
-          <div class="d-flex gap-3 mt-2 small">
-            <div><span class="text-muted">自社</span> <span class="fw-bold">{{ cs.self_value }}</span></div>
-            <div><span class="text-muted">業界中央値</span> {{ cs.industry_median }}</div>
-            <div><span class="text-muted">上位25%</span> {{ cs.industry_top25 }}</div>
-          </div>
-          <div class="small mt-2" style="color:#166534;">💬 {{ cs.narrative }}</div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>業界比較データに基づく強みの自動抽出。社長は他社の数字を知らないことが多いので、ここを共有するだけで「自社の良いところ」を実感してもらえます。</div>
-  </div>
-  {% endif %}
-
-  {# 優先課題 → ソリューション → 効果（のだけ先生FB対応） #}
-  {% if result.prioritized_problems %}
+  {# ※ 他社比較強み・優先課題は Tab1（提案・打ち手）に移動済み #}
+  {# 非表示の旧ブロック（互換性のため残骸を null-block化） #}
+  {% if false and result.prioritized_problems %}
   <div class="card mb-4" style="background:#fff;border:2px solid #f59e0b;border-radius:14px;padding:18px;">
     <h5 class="fw-bold mb-3" style="color:#b45309;"><i class="fas fa-bullseye me-2"></i>優先取り組み課題（重要度順）</h5>
     <div class="small text-muted mb-3">課題ごとに「ソリューション」「期待効果」「申し込みボタン」をまとめています。クリックで詳細を開閉できます。</div>
@@ -883,7 +856,115 @@
 </div>
 
 {# ========== タブ2：ビジネスアドバイス ========== #}
-<div class="cp-tab-panel" id="panel-advice">
+<div class="cp-tab-panel active" id="panel-advice">
+
+  {# ▼▼▼ Tab1 の主役：優先課題 → ソリューション → 効果（のだけ先生FB対応） ▼▼▼ #}
+  {% if result.prioritized_problems %}
+  <div class="card mb-4" style="background:#fff;border:2px solid #f59e0b;border-radius:14px;padding:18px;">
+    <h5 class="fw-bold mb-3" style="color:#b45309;"><i class="fas fa-bullseye me-2"></i>優先取り組み課題（重要度順）</h5>
+    <div class="small text-muted mb-3">課題ごとに「ソリューション」「期待効果」「申し込みボタン」をまとめています。クリックで詳細を開閉できます。</div>
+
+    {% for p in result.prioritized_problems %}
+    <details class="mb-3" style="border:1px solid {% if p.severity == '高' %}#ef4444{% elif p.severity == '中' %}#f59e0b{% else %}#3b82f6{% endif %};border-radius:10px;overflow:hidden;" {% if p.rank <= 3 %}open{% endif %}>
+      <summary style="background:{% if p.severity == '高' %}#fef2f2{% elif p.severity == '中' %}#fef3c7{% else %}#eff6ff{% endif %};padding:14px 18px;cursor:pointer;list-style:none;">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge" style="background:{% if p.severity == '高' %}#dc2626{% elif p.severity == '中' %}#d97706{% else %}#2563eb{% endif %};color:#fff;font-size:.85rem;">#{{ p.rank }}</span>
+            <span class="badge" style="background:{% if p.severity == '高' %}#fecaca{% elif p.severity == '中' %}#fde68a{% else %}#bfdbfe{% endif %};color:#000;">重要度 {{ p.severity }}</span>
+            <span class="fw-bold" style="color:{% if p.severity == '高' %}#7f1d1d{% elif p.severity == '中' %}#78350f{% else %}#1e3a8a{% endif %};font-size:1.05rem;">{{ p.title }}</span>
+          </div>
+          <span class="small text-muted">▼ クリックで開閉</span>
+        </div>
+      </summary>
+
+      <div style="padding:16px 18px;background:#fff;">
+        <div class="mb-3">
+          <div class="small fw-bold mb-1" style="color:#6b7280;letter-spacing:.05em;">📌 詳細</div>
+          <div style="line-height:1.7;">{{ p.detail }}</div>
+        </div>
+
+        {% if p.solutions %}
+        <div class="mb-3">
+          <div class="small fw-bold mb-2" style="color:#0e7490;letter-spacing:.05em;">💡 ソリューション（{{ p.solutions|length }}つ）</div>
+          {% for sol in p.solutions %}
+          <div class="card p-3 mb-2" style="border-left:4px solid #06b6d4;background:#f0fdfa;">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+              <div class="fw-bold" style="color:#155e75;">{{ sol.title }}</div>
+              <div class="d-flex gap-1 flex-wrap">
+                {% if sol.approach_type %}<span class="badge" style="background:#0891b2;color:#fff;">{{ sol.approach_type }}</span>{% endif %}
+                {% if sol.timeframe %}<span class="badge bg-light text-dark">{{ sol.timeframe }}</span>{% endif %}
+                {% if sol.difficulty %}<span class="badge" style="background:{% if sol.difficulty == '低' %}#16a34a{% elif sol.difficulty == '中' %}#ca8a04{% else %}#dc2626{% endif %};color:#fff;">難易度{{ sol.difficulty }}</span>{% endif %}
+              </div>
+            </div>
+            <div class="row g-2 small">
+              {% if sol.impact_min is not none and sol.impact_max is not none %}
+              <div class="col-md-6">
+                <span class="text-muted">💰 効果（年）:</span>
+                <span class="fw-bold" style="color:#16a34a;">+{{ "{:,.0f}".format(sol.impact_min) }}〜{{ "{:,.0f}".format(sol.impact_max) }}万円</span>
+              </div>
+              {% endif %}
+              {% if sol.first_step %}
+              <div class="col-md-6">
+                <span class="text-muted">▶ 一歩目:</span>
+                <span>{{ sol.first_step }}</span>
+              </div>
+              {% endif %}
+            </div>
+            {% if sol.why %}<div class="small mt-2" style="color:#155e75;">なぜ効くか: {{ sol.why }}</div>{% endif %}
+            {% if sol.affiliate_categories %}
+            <div class="mt-2 d-flex gap-2 flex-wrap">
+              {% for cat in sol.affiliate_categories %}
+              <a href="/partner-referral?type={{ cat|urlencode }}&title={{ sol.title|urlencode }}&client={{ client.id }}" class="btn btn-sm" style="background:#06b6d4;color:#fff;border:none;">
+                <i class="fas fa-paper-plane me-1"></i>{{ cat }}に申込
+              </a>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if p.expected_outcome %}
+        <div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-radius:8px;padding:12px 14px;border-left:4px solid #16a34a;">
+          <div class="small fw-bold mb-1" style="color:#15803d;letter-spacing:.05em;">🎯 予想効果</div>
+          <div style="color:#14532d;line-height:1.7;">{{ p.expected_outcome }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# 他社比較強み（社長への自信材料） #}
+  {% if result.competitive_strengths %}
+  <div class="card p-3 mb-4" style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #22c55e;">
+    <h6 class="fw-bold mb-3" style="color:#15803d;"><i class="fas fa-trophy me-2"></i>他社と比較した強み <span class="small text-muted">（社長に自信を持って話せる材料）</span></h6>
+    <div class="row g-2">
+      {% for cs in result.competitive_strengths %}
+      <div class="col-md-6">
+        <div class="p-3" style="background:#fff;border-radius:8px;border-left:4px solid {% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <span class="fw-bold" style="color:#15803d;">
+              <span class="simple-only">{% if cs.owner_metric %}{{ cs.owner_metric }}が業界{% if cs.rank == 'top25' %}上位25%{% else %}中央値超{% endif %}{% else %}{{ cs.title }}{% endif %}</span>
+              <span class="pro-only">{{ cs.metric }}が業界{% if cs.rank == 'top25' %}上位25%{% else %}中央値超{% endif %}</span>
+            </span>
+            <span class="badge" style="background:{% if cs.rank == 'top25' %}#16a34a{% else %}#84cc16{% endif %};color:#fff;">{{ cs.gap }}</span>
+          </div>
+          <div class="d-flex gap-3 mt-2 small">
+            <div><span class="text-muted">自社</span> <span class="fw-bold">{{ cs.self_value }}</span></div>
+            <div><span class="text-muted">業界中央値</span> {{ cs.industry_median }}</div>
+            <div><span class="text-muted">上位25%</span> {{ cs.industry_top25 }}</div>
+          </div>
+          <div class="small mt-2" style="color:#166534;">💬 {{ cs.narrative }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {# ▲▲▲ Tab1 の主役ここまで ▲▲▲ #}
 
   {# 統合再生プラン — プロ向け #}
   {% if result.integrated_turnaround_plan %}
@@ -1560,7 +1641,9 @@
   (function() {
     const el = document.getElementById('costPie');
     if (!el) return;
-    const items = {{ (breakdown.selling_expenses_detail or [])|tojson }};
+    {% set _sed_raw = (breakdown.selling_expenses_detail if breakdown else None) %}
+    {% set _sed = _sed_raw if (_sed_raw is iterable and _sed_raw is not mapping and _sed_raw is not string) else [] %}
+    const items = {{ (_sed|list)|tojson }};
     if (!items || items.length === 0) return;
     const sorted = items.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0));
     const top = sorted.slice(0, 10);
