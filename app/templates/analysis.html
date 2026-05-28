@@ -1,6 +1,22 @@
 {% extends 'base.html' %}
 {% block title %}AI分析結果 - {{ client.name }}{% endblock %}
 
+{# 課題ラベル：metric_key から prioritized_problems を逆引きしてバッジ表示 #}
+{% macro issue_badge(metric_key) %}
+  {% if result and result.prioritized_problems %}
+    {% for p in result.prioritized_problems %}
+      {% if p.related_metrics and metric_key in p.related_metrics %}
+        <a href="#panel-advice" onclick="document.querySelector('.cp-tab[data-tab=&quot;advice&quot;]').click(); return true;"
+          class="badge text-decoration-none"
+          style="background:{% if p.severity == '高' %}#dc2626{% elif p.severity == '中' %}#d97706{% else %}#2563eb{% endif %};color:#fff;font-size:.65rem;margin-top:4px;cursor:pointer;"
+          title="クリックで提案タブの該当課題へ">
+          ⚠️ 課題#{{ p.rank }}
+        </a>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+{% endmacro %}
+
 {% block head %}
 <style>
   /* ========== 表示モード切替 ========== */
@@ -204,14 +220,14 @@
 
 {# ========== タブ切替 ========== #}
 <div class="cp-tabs" id="cpTabs">
-  <div class="cp-tab active" data-tab="advice">💡 提案・打ち手</div>
-  <div class="cp-tab" data-tab="overview">📊 数字の詳細</div>
+  <div class="cp-tab active" data-tab="overview">📊 数値サマリー</div>
+  <div class="cp-tab" data-tab="advice">💡 提案・打ち手</div>
   <div class="cp-tab" data-tab="hearing">❓ 追加質問・ヒアリング</div>
   <div class="cp-tab" data-tab="simulator">🎚️ シミュレーター</div>
 </div>
 
 {# ========== タブ1：財務概要 ========== #}
-<div class="cp-tab-panel" id="panel-overview">
+<div class="cp-tab-panel active" id="panel-overview">
 
   {# ヒアリング質問（業種判定要確認） #}
   {% if result.industry_confidence == 'low' and result.hearing_sheet %}
@@ -234,6 +250,7 @@
             <i class="fas fa-{% if growth >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(growth) }}%
           </div>
         {% else %}<div class="metric-sub">前期データなし</div>{% endif %}
+        {{ issue_badge('revenue') }}
       </div>
     </div>
     <div class="col-6 col-md-3">
@@ -262,6 +279,15 @@
         <div class="metric-sub"><abbr class="term" title="本業で得た利益の売上に対する割合">営業利益率</abbr> {% if fd.revenue > 0 %}{{ "%.1f"|format(fd.operating_profit / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
       </div>
     </div>
+    {% if fd.ordinary_profit %}
+    <div class="col-6 col-md-3">
+      <div class="metric-card c-orange">
+        <div class="metric-label">経常利益</div>
+        <div class="metric-value">{{ "{:,.0f}".format(fd.ordinary_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        <div class="metric-sub">営業利益±営業外損益（金利等）</div>
+      </div>
+    </div>
+    {% endif %}
     <div class="col-6 col-md-3">
       <div class="metric-card c-purple">
         <div class="metric-label">当期純利益</div>
@@ -276,6 +302,24 @@
         {% endif %}
       </div>
     </div>
+    {% if fd.cost_of_sales %}
+    <div class="col-6 col-md-3">
+      <div class="metric-card" style="--c:#9ca3af;">
+        <div class="metric-label">売上原価</div>
+        <div class="metric-value">{{ "{:,.0f}".format(fd.cost_of_sales) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        <div class="metric-sub">売上比 {% if fd.revenue %}{{ "%.1f"|format(fd.cost_of_sales / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if fd.selling_expenses %}
+    <div class="col-6 col-md-3">
+      <div class="metric-card" style="--c:#9ca3af;">
+        <div class="metric-label">販管費</div>
+        <div class="metric-value">{{ "{:,.0f}".format(fd.selling_expenses) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        <div class="metric-sub">売上比 {% if fd.revenue %}{{ "%.1f"|format(fd.selling_expenses / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   {# PL: 費用詳細トグル + 円グラフ #}
@@ -311,6 +355,29 @@
     <h5 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2 text-info"></i>貸借対照表（BS）サマリー <span class="small text-muted">— 資本・負債・売掛/買掛サイクル</span></h5>
   </div>
   <div class="row g-3 mb-3">
+    {% if fd.cash and fd.cash > 0 %}
+    <div class="col-6 col-md-3"><div class="metric-card c-green">
+      <div class="metric-label">💰 現預金</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.cash) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if result.growth_rates and result.growth_rates.cash is not none %}
+        {% set g = result.growth_rates.cash %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      {% else %}
+        <div class="metric-sub">{% if fd.revenue > 0 %}月商 {{ "%.1f"|format(fd.cash / (fd.revenue / 12)) }}ヶ月分{% else %}—{% endif %}</div>
+      {% endif %}
+      {{ issue_badge('cash') }}
+    </div></div>
+    {% endif %}
+    {% if fd.equity and fd.equity != 0 %}
+    <div class="col-6 col-md-3"><div class="metric-card c-blue">
+      <div class="metric-label">純資産</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.equity) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if result.growth_rates and result.growth_rates.equity is not none %}
+        {% set g = result.growth_rates.equity %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      {% else %}<div class="metric-sub">資本金 + 内部留保</div>{% endif %}
+    </div></div>
+    {% endif %}
     {% if fd.total_assets > 0 %}
     <div class="col-6 col-md-3"><div class="metric-card c-teal">
       <div class="metric-label">総資産</div>
@@ -342,6 +409,7 @@
         {% set g = result.growth_rates.interest_bearing_debt %}
         <div class="metric-delta {% if g <= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g <= 0 %}arrow-down{% else %}arrow-up{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">金利が発生する借入</div>{% endif %}
+      {{ issue_badge('interest_bearing_debt') }}
     </div></div>
     {% endif %}
   </div>
@@ -738,6 +806,47 @@
     <h5 class="fw-bold mb-3"><i class="fas fa-fire me-2 text-danger"></i>キャッシュフロー（CF）サマリー</h5>
   </div>
 
+  {# CF 4バケツ（営業/投資/財務/フリー） #}
+  {% if cash_cf %}
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#16a34a;">
+      <div class="metric-label">営業CF（推定）</div>
+      <div class="metric-value {% if cash_cf.operating_cf < 0 %}text-danger{% endif %}">{{ "{:+,.0f}".format(cash_cf.operating_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">本業で生まれた現金</div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#3b82f6;">
+      <div class="metric-label">投資CF（推定）</div>
+      <div class="metric-value">{{ "{:+,.0f}".format(cash_cf.investing_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">設備投資等で使った現金</div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#a855f7;">
+      <div class="metric-label">財務CF（推定）</div>
+      <div class="metric-value">{{ "{:+,.0f}".format(cash_cf.financing_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">借入の増減</div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#f59e0b;">
+      <div class="metric-label">🔥 フリーCF（推定）</div>
+      <div class="metric-value {% if cash_cf.free_cf < 0 %}text-danger{% endif %}">{{ "{:+,.0f}".format(cash_cf.free_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">営業CF＋投資CF（自由に使える現金）</div>
+    </div></div>
+  </div>
+  {% if cash_cf.cash_change is not none %}
+  <div class="card p-3 mb-3" style="background:#f9fafb;">
+    <div class="row g-2 small align-items-center">
+      <div class="col-md-4"><span class="text-muted">現預金 期末残高</span> <strong>{{ "{:,.0f}".format(fd.cash) }}万円</strong></div>
+      <div class="col-md-4"><span class="text-muted">前期比 増減</span> <strong class="{% if cash_cf.cash_change < 0 %}text-danger{% else %}text-success{% endif %}">{{ "{:+,.0f}".format(cash_cf.cash_change) }}万円</strong></div>
+      <div class="col-md-4"><span class="text-muted">減価償却（推定）</span> {{ "{:,.0f}".format(cash_cf.depreciation or 0) }}万円</div>
+    </div>
+  </div>
+  {% endif %}
+  {% if cash_cf.notes %}
+  <div class="small text-muted mb-3" style="background:#fffbeb;border-left:3px solid #fbbf24;padding:6px 10px;border-radius:4px;">
+    <i class="fas fa-info-circle me-1"></i><strong>推計前提:</strong>
+    {% for n in cash_cf.notes %} {{ n }}{% if not loop.last %}／{% endif %}{% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
+
   {# 銀行視点ヘルプ — 経営者向け数字の読み方ガイド #}
   <details class="card p-3 mb-4" style="background:#eff6ff;border:1px solid #bfdbfe;">
     <summary class="fw-bold" style="cursor:pointer;color:#1e3a8a;"><i class="fas fa-university me-1"></i>数字の読み方ガイド（銀行・金融機関の視点）</summary>
@@ -856,7 +965,7 @@
 </div>
 
 {# ========== タブ2：ビジネスアドバイス ========== #}
-<div class="cp-tab-panel active" id="panel-advice">
+<div class="cp-tab-panel" id="panel-advice">
 
   {# ▼▼▼ Tab1 の主役：優先課題 → ソリューション → 効果（のだけ先生FB対応） ▼▼▼ #}
   {% if result.prioritized_problems %}

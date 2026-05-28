@@ -7,6 +7,92 @@
 from typing import Dict
 
 
+def compute_cf_buckets(fd, breakdown: Dict = None, historical_data: list = None) -> Dict:
+    """
+    CFを4バケツ（営業CF / 投資CF / 財務CF / フリーCF）で推計する。
+    決算書のCF計算書がないため、間接法で推定。
+
+    Returns:
+      {
+        "operating_cf": <営業CF推定>,
+        "investing_cf": <投資CF推定>,
+        "financing_cf": <財務CF推定>,
+        "free_cf": <フリーCF = 営業CF + 投資CF>,
+        "cash_change": <現預金増減>,
+        "notes": ["推計の前提を1-3個"]
+      }
+    """
+    notes = []
+
+    # 減価償却（breakdownから取れれば利用、無ければ 0）
+    depreciation = 0
+    if breakdown and isinstance(breakdown, dict):
+        sed = breakdown.get("selling_expenses_detail", []) or []
+        if isinstance(sed, list):
+            for item in sed:
+                if isinstance(item, dict):
+                    name = str(item.get("name", ""))
+                    if "減価償却" in name or "償却" in name:
+                        try:
+                            depreciation += float(item.get("amount", 0))
+                        except Exception:
+                            pass
+
+    # 運転資本変動（前期と比較）
+    prev = None
+    if historical_data:
+        sorted_hd = sorted(historical_data, key=lambda x: x.period or "")
+        for h in sorted_hd:
+            if h.id == fd.id:
+                break
+            prev = h
+
+    wc_change = 0
+    if prev:
+        dRecv = (getattr(fd, "receivables", 0) or 0) - (getattr(prev, "receivables", 0) or 0)
+        dInv = (getattr(fd, "inventory", 0) or 0) - (getattr(prev, "inventory", 0) or 0)
+        # 簡略：買掛金は流動負債で代用（精密版は別途）
+        wc_change = -(dRecv + dInv)  # 売掛・在庫増は CF マイナス
+        notes.append(f"運転資本変動（売掛+在庫の増減）を反映：{wc_change:+,.0f}万円")
+    else:
+        notes.append("前期データなしのため運転資本変動は0扱い")
+
+    # 営業CF ≒ 当期純利益 + 減価償却 + 運転資本変動
+    net_profit = getattr(fd, "net_profit", 0) or 0
+    operating_cf = net_profit + depreciation + wc_change
+
+    # 投資CF：固定資産増減（前期比）でざっくり推定。今回は depreciation 同額をマイナス
+    # （※実額は固定資産台帳で別途）
+    investing_cf = -depreciation if depreciation > 0 else 0
+    if depreciation > 0:
+        notes.append("投資CFは減価償却同額のマイナスで簡易推定（実額は固定資産台帳要）")
+
+    # 財務CF：有利子負債の前期比（増えれば+、減れば-）
+    financing_cf = 0
+    if prev:
+        d_debt = (getattr(fd, "interest_bearing_debt", 0) or 0) - (getattr(prev, "interest_bearing_debt", 0) or 0)
+        financing_cf = d_debt
+
+    # フリーCF = 営業CF + 投資CF
+    free_cf = operating_cf + investing_cf
+
+    # 現預金増減
+    cash_change = None
+    if prev:
+        cash_change = (getattr(fd, "cash", 0) or 0) - (getattr(prev, "cash", 0) or 0)
+
+    return {
+        "operating_cf": round(operating_cf, 0),
+        "investing_cf": round(investing_cf, 0),
+        "financing_cf": round(financing_cf, 0),
+        "free_cf": round(free_cf, 0),
+        "cash_change": round(cash_change, 0) if cash_change is not None else None,
+        "depreciation": round(depreciation, 0),
+        "wc_change": round(wc_change, 0),
+        "notes": notes,
+    }
+
+
 def compute_working_capital(fd, payables_days: float = 45.0) -> Dict:
     """
     運転資本指標を計算。

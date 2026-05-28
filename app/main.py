@@ -777,10 +777,13 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
         breakdown = {}
 
     # キャッシュ・運転資本指標・EBITDAを template に渡す（キャッシュ診断タブで使用）
-    from .services.cash_analysis import compute_burn_rate, compute_working_capital, compute_ebitda
+    from .services.cash_analysis import compute_burn_rate, compute_working_capital, compute_ebitda, compute_cf_buckets
     cash_burn = compute_burn_rate(fd)
     cash_wc = compute_working_capital(fd)
     cash_ebitda = compute_ebitda(fd, breakdown)
+    # CF 4バケツ（営業/投資/財務/フリー）
+    _all_fds_for_cf = db.query(FinancialData).join(Client).filter(Client.id == fd.client_id).all()
+    cash_cf = compute_cf_buckets(fd, breakdown=breakdown, historical_data=_all_fds_for_cf)
 
     existing = db.query(Analysis).filter(Analysis.financial_data_id == fd_id).order_by(Analysis.created_at.desc()).first()
     if existing:
@@ -788,7 +791,7 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
         return templates.TemplateResponse("analysis.html", {
             "request": request, "user": user, "client": cl, "fd": fd, "result": result,
             "breakdown": breakdown,
-            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda,
+            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "analysis_id": existing.id, "cached": True
         })
 
@@ -837,14 +840,14 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
         return templates.TemplateResponse("analysis.html", {
             "request": request, "user": user, "client": cl, "fd": fd, "result": result,
             "breakdown": breakdown,
-            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda,
+            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "analysis_id": analysis.id, "cached": False
         })
     except Exception as e:
         return templates.TemplateResponse("analysis.html", {
             "request": request, "user": user, "client": cl, "fd": fd, "result": None,
             "breakdown": breakdown,
-            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda,
+            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "error": str(e), "cached": False, "analysis_id": None
         })
 
