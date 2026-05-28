@@ -44,15 +44,38 @@
   .data-limit { background: #fffbeb; border-left: 4px solid #fbbf24; padding: 10px 14px; margin-bottom: 16px; border-radius: 4px; font-size: .85rem; color: #78350f; }
 
   /* ========== KPIカード ========== */
-  .metric-card { background: #fff; border-radius: 10px; padding: 16px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.06); border-top: 3px solid var(--c, #3b82f6); height: 100%; }
-  .metric-card .metric-label { font-size: .75rem; color: #6b7280; font-weight: 600; letter-spacing: .03em; }
-  .metric-card .metric-value { font-size: 1.55rem; font-weight: 700; color: #111827; margin-top: 2px; line-height: 1.1; }
-  .metric-card .metric-delta { font-size: .8rem; font-weight: 600; margin-top: 6px; }
+  /* ========== メトリクスカード（Raksul流：白基調・モノクロ） ========== */
+  .metric-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 18px 16px;
+    border: 1px solid var(--rk-border);
+    border-top: none;
+    box-shadow: none;
+    height: 100%;
+    position: relative;
+    transition: border-color .15s;
+  }
+  .metric-card::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px; right: -1px;
+    height: 3px;
+    background: var(--rk-black);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+  }
+  .metric-card .metric-label { font-size: .75rem; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .03em; margin-bottom: 6px; }
+  .metric-card .metric-value { font-size: 1.7rem; font-weight: 900; color: var(--rk-black); margin-top: 2px; line-height: 1.1; letter-spacing: -0.01em; }
+  .metric-card .metric-delta { font-size: .8rem; font-weight: 700; margin-top: 8px; }
   .metric-delta.up   { color: #16a34a; }
-  .metric-delta.down { color: #dc2626; }
-  .metric-card .metric-sub { font-size: .7rem; color: #9ca3af; margin-top: 4px; }
-  .c-blue   { --c: #3b82f6; } .c-green  { --c: #22c55e; } .c-orange { --c: #f59e0b; }
-  .c-purple { --c: #a855f7; } .c-red    { --c: #ef4444; } .c-teal   { --c: #14b8a6; }
+  .metric-delta.down { color: var(--rk-accent); }
+  .metric-card .metric-sub { font-size: .7rem; color: var(--rk-text-muted); margin-top: 6px; }
+  /* 課題が紐づくカードは上ボーダーを赤に */
+  .metric-card.has-issue::before { background: var(--rk-accent); }
+  .metric-card.has-strength::before { background: #16a34a; }
+  /* 色クラスは全て無効化（互換性のため定義は残す） */
+  .c-blue, .c-green, .c-orange, .c-purple, .c-red, .c-teal { --c: var(--rk-black); }
 
   /* ========== バーンレートカード ========== */
   .burn-card { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-radius: 12px; padding: 16px 18px; border: 1px solid #fecaca; }
@@ -259,7 +282,7 @@
   {% endif %}
 
   {# ========== PLサマリー ========== #}
-  <h5 class="fw-bold mb-3" style="color:#1A1A2E;"><i class="fas fa-chart-line me-2" style="color:#E81E5C;"></i>損益計算書（PL）サマリー <span class="small text-muted">— 売上・粗利・営業利益・当期純利益</span></h5>
+  <div class="rk-section-title"><span class="rk-section-bar"></span>損益計算書（PL）サマリー <span class="small text-muted ms-2" style="font-weight:500;">— 売上・粗利・営業利益・当期純利益</span></div>
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
       <div class="metric-card c-blue">
@@ -372,10 +395,7 @@
   {% endif %}
 
   {# ========== BSサマリー ========== #}
-  <div class="my-4 pt-3" style="border-top:1px solid #e5e7eb;">
-    <h5 class="fw-bold mb-3" style="color:#1A1A2E;"><i class="fas fa-balance-scale me-2" style="color:#E81E5C;"></i>貸借対照表（BS）サマリー</h5>
-    <div class="small text-muted mb-3">— 資本・負債の状況、運転資本サイクル</div>
-  </div>
+  <div class="rk-section-title mt-5"><span class="rk-section-bar"></span>貸借対照表（BS）サマリー <span class="small text-muted ms-2" style="font-weight:500;">— 資本・負債の状況、運転資本サイクル</span></div>
 
   {# 行1: 資産系（現預金・売掛・在庫・総資産） #}
   <div class="row g-3 mb-2">
@@ -821,9 +841,7 @@
   </div>
 
   {# ========== CFサマリー（数値サマリータブの一部） ========== #}
-  <div class="my-4 pt-3" style="border-top:3px solid #f3f4f6;">
-    <h5 class="fw-bold mb-3"><i class="fas fa-fire me-2 text-danger"></i>キャッシュフロー（CF）サマリー</h5>
-  </div>
+  <div class="rk-section-title mt-5"><span class="rk-section-bar"></span>キャッシュフロー（CF）サマリー <span class="small text-muted ms-2" style="font-weight:500;">— 現金の流れと推移</span></div>
 
   {# CF 4バケツ（営業/投資/財務/フリー） #}
   {% if cash_cf %}
@@ -1693,6 +1711,14 @@
     try { localStorage.setItem('cp_mode', mode); } catch(e) {}
     applyRounding(mode === 'simple');
   }
+
+  // 課題バッジが入ってるカードに has-issue クラスを自動付与（赤い上ボーダー）
+  document.querySelectorAll('.metric-card').forEach(card => {
+    // 課題リンク（issue_badge マクロが生成する a.badge）が含まれてれば has-issue
+    if (card.querySelector('a.badge[title*="課題"]')) {
+      card.classList.add('has-issue');
+    }
+  });
   modeBtns.forEach(b => b.addEventListener('click', () => applyMode(b.dataset.mode)));
   // 初期モード（保存があれば復元、なければ社長向け）
   let initMode = 'simple';
