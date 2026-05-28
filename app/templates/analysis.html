@@ -22,15 +22,15 @@
   /* ========== 表示モード切替 ========== */
   .mode-switch { display: flex; gap: 4px; background: #f3f4f6; padding: 4px; border-radius: 99px; margin-left: auto; }
   .mode-switch button { border: none; background: transparent; padding: 6px 16px; border-radius: 99px; font-size: .8rem; font-weight: 700; cursor: pointer; color: #6b7280; transition: all .15s; }
-  .mode-switch button.active { background: #1a237e; color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.15); }
+  .mode-switch button.active { background: #1A1A2E; color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.15); }
   body.mode-simple .pro-only { display: none !important; }
   body:not(.mode-simple) .simple-only { display: none !important; }
 
   /* ========== タブ ========== */
-  .cp-tabs { border-bottom: 2px solid #e5e7eb; display: flex; gap: 0; margin-bottom: 24px; }
+  .cp-tabs { border-bottom: 2px solid #e5e7eb; display: flex; gap: 0; margin-bottom: 24px; flex-wrap: wrap; }
   .cp-tab { padding: 12px 24px; font-weight: 600; color: #6b7280; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; user-select: none; }
-  .cp-tab:hover { color: #f59e0b; }
-  .cp-tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+  .cp-tab:hover { color: #E81E5C; }
+  .cp-tab.active { color: #E81E5C; border-bottom-color: #E81E5C; }
   .cp-tab-panel { display: none; }
   .cp-tab-panel.active { display: block; animation: fadeIn .2s; }
   @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
@@ -237,8 +237,31 @@
   </div>
   {% endif %}
 
+  {# ========== 課題TOP3 サマリ（数字の前に1秒で全体感） ========== #}
+  {% if result.prioritized_problems %}
+  <div class="card mb-4" style="border:1px solid #E5E7EB;background:#FAFAFA;border-radius:12px;padding:16px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="fw-bold mb-0" style="color:#1A1A2E;"><i class="fas fa-bullseye me-2" style="color:#E81E5C;"></i>この会社で取り組むべき課題 TOP3</h6>
+      <a href="#" onclick="document.querySelector('.cp-tab[data-tab=&quot;advice&quot;]').click(); window.scrollTo({top:0,behavior:'smooth'}); return false;" class="small text-decoration-none" style="color:#E81E5C;">詳細・打ち手を見る →</a>
+    </div>
+    <div class="row g-2">
+      {% for p in result.prioritized_problems[:3] %}
+      <div class="col-md-4">
+        <div class="p-3" style="background:#fff;border-radius:8px;border-left:4px solid {% if p.severity == '高' %}#dc2626{% elif p.severity == '中' %}#d97706{% else %}#2563eb{% endif %};">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge" style="background:{% if p.severity == '高' %}#dc2626{% elif p.severity == '中' %}#d97706{% else %}#2563eb{% endif %};color:#fff;">#{{ p.rank }}</span>
+            <span class="small text-muted">重要度 {{ p.severity }}</span>
+          </div>
+          <div class="fw-bold" style="color:#1A1A2E;line-height:1.4;">{{ p.title }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   {# ========== PLサマリー ========== #}
-  <h5 class="fw-bold mb-3"><i class="fas fa-chart-line me-2 text-primary"></i>損益計算書（PL）サマリー <span class="small text-muted">— 売上・粗利・営業利益・当期純利益</span></h5>
+  <h5 class="fw-bold mb-3" style="color:#1A1A2E;"><i class="fas fa-chart-line me-2" style="color:#E81E5C;"></i>損益計算書（PL）サマリー <span class="small text-muted">— 売上・粗利・営業利益・当期純利益</span></h5>
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
       <div class="metric-card c-blue">
@@ -351,102 +374,100 @@
   {% endif %}
 
   {# ========== BSサマリー ========== #}
-  <div class="my-4 pt-3" style="border-top:3px solid #f3f4f6;">
-    <h5 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2 text-info"></i>貸借対照表（BS）サマリー <span class="small text-muted">— 資本・負債・売掛/買掛サイクル</span></h5>
+  <div class="my-4 pt-3" style="border-top:1px solid #e5e7eb;">
+    <h5 class="fw-bold mb-3" style="color:#1A1A2E;"><i class="fas fa-balance-scale me-2" style="color:#E81E5C;"></i>貸借対照表（BS）サマリー</h5>
+    <div class="small text-muted mb-3">— 資本・負債の状況、運転資本サイクル</div>
   </div>
-  <div class="row g-3 mb-3">
-    {% if fd.cash and fd.cash > 0 %}
+
+  {# 行1: 資産系（現預金・売掛・在庫・総資産） #}
+  <div class="row g-3 mb-2">
     <div class="col-6 col-md-3"><div class="metric-card c-green">
       <div class="metric-label">💰 現預金</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.cash) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.cash or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
       {% if result.growth_rates and result.growth_rates.cash is not none %}
         {% set g = result.growth_rates.cash %}
         <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}
-        <div class="metric-sub">{% if fd.revenue > 0 %}月商 {{ "%.1f"|format(fd.cash / (fd.revenue / 12)) }}ヶ月分{% else %}—{% endif %}</div>
+        <div class="metric-sub">{% if fd.revenue > 0 and fd.cash %}月商 {{ "%.1f"|format(fd.cash / (fd.revenue / 12)) }}ヶ月分{% else %}—{% endif %}</div>
       {% endif %}
       {{ issue_badge('cash') }}
     </div></div>
-    {% endif %}
-    {% if fd.equity and fd.equity != 0 %}
-    <div class="col-6 col-md-3"><div class="metric-card c-blue">
-      <div class="metric-label">純資産</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.equity) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.equity is not none %}
-        {% set g = result.growth_rates.equity %}
-        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
-      {% else %}<div class="metric-sub">資本金 + 内部留保</div>{% endif %}
+    <div class="col-6 col-md-3"><div class="metric-card c-orange">
+      <div class="metric-label">売掛金</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.receivables or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">{% if cash_wc and cash_wc.receivables_days %}回収サイクル {{ cash_wc.receivables_days }}日{% else %}—{% endif %}</div>
+      {{ issue_badge('receivables') }}
     </div></div>
-    {% endif %}
-    {% if fd.total_assets > 0 %}
+    <div class="col-6 col-md-3"><div class="metric-card c-orange">
+      <div class="metric-label">在庫</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.inventory or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">{% if cash_wc and cash_wc.inventory_days %}回転サイクル {{ cash_wc.inventory_days }}日{% else %}—{% endif %}</div>
+      {{ issue_badge('inventory') }}
+    </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-teal">
       <div class="metric-label">総資産</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.total_assets) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.total_assets or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
       {% if result.growth_rates and result.growth_rates.total_assets is not none %}
         {% set g = result.growth_rates.total_assets %}
         <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">会社の資産合計</div>{% endif %}
     </div></div>
-    {% endif %}
-    {% if fd.equity > 0 and fd.total_assets > 0 %}
-    <div class="col-6 col-md-3"><div class="metric-card c-blue">
-      <div class="metric-label"><abbr class="term" title="総資産のうち、借入に頼らない自己資本の割合">自己資本比率</abbr></div>
-      <div class="metric-value">{{ "%.1f"|format(fd.equity / fd.total_assets * 100) }}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
-      {% if result.growth_rates and result.growth_rates.equity is not none %}
-        {% set g = result.growth_rates.equity %}
-        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 純資産 前期比 {{ "%+.1f"|format(g) }}%</div>
-      {% else %}<div class="metric-sub">純資産 {{ "{:,.0f}".format(fd.equity) }}万円</div>{% endif %}
-    </div></div>
-    {% endif %}
-    {% if fd.current_liabilities > 0 and fd.current_assets > 0 %}
-    <div class="col-6 col-md-3"><div class="metric-card c-green"><div class="metric-label"><abbr class="term" title="1年以内の短期負債に対する流動資産の割合">流動比率</abbr></div><div class="metric-value">{{ "%.1f"|format(fd.current_assets / fd.current_liabilities * 100) }}<span style="font-size:.7em;color:#9ca3af;">%</span></div><div class="metric-sub">1年以内の支払い余力</div></div></div>
-    {% endif %}
-    {% if fd.interest_bearing_debt > 0 %}
+  </div>
+
+  {# 行2: 負債・資本系 #}
+  <div class="row g-3 mb-2">
     <div class="col-6 col-md-3"><div class="metric-card c-red">
-      <div class="metric-label"><abbr class="term" title="金利が発生する借入（銀行借入・社債等）。EBITDAの3倍以下で健全、5倍超で銀行警戒">有利子負債</abbr></div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.interest_bearing_debt) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-label">有利子負債</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.interest_bearing_debt or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
       {% if result.growth_rates and result.growth_rates.interest_bearing_debt is not none %}
         {% set g = result.growth_rates.interest_bearing_debt %}
         <div class="metric-delta {% if g <= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g <= 0 %}arrow-down{% else %}arrow-up{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">金利が発生する借入</div>{% endif %}
       {{ issue_badge('interest_bearing_debt') }}
     </div></div>
-    {% endif %}
+    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#9ca3af;">
+      <div class="metric-label">買掛金</div>
+      <div class="metric-value">—<span style="font-size:.7em;color:#9ca3af;"></span></div>
+      <div class="metric-sub">{% if cash_wc and cash_wc.payables_days %}支払サイクル {{ cash_wc.payables_days }}日{% else %}データなし{% endif %}</div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="metric-card c-blue">
+      <div class="metric-label">純資産</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.equity or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if result.growth_rates and result.growth_rates.equity is not none %}
+        {% set g = result.growth_rates.equity %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      {% else %}<div class="metric-sub">資本金 + 内部留保</div>{% endif %}
+    </div></div>
+    <div class="col-6 col-md-3"><div class="metric-card c-purple">
+      <div class="metric-label">自己資本比率</div>
+      <div class="metric-value">{% if fd.equity and fd.total_assets %}{{ "%.1f"|format(fd.equity / fd.total_assets * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
+      <div class="metric-sub">30%以上で健全、10%以下で警戒</div>
+    </div></div>
   </div>
 
-  {# 売掛・買掛・在庫サイクル #}
-  {% if cash_wc and (cash_wc.receivables_days or cash_wc.inventory_days) %}
+  {# 行3: 健全性指標（流動比率・負債比率・CCC・月商キャッシュ倍率） #}
   <div class="row g-3 mb-3">
-    {% if cash_wc.receivables_days %}
-    <div class="col-6 col-md-3"><div class="metric-card c-orange">
-      <div class="metric-label"><abbr class="term" title="売上が現金になるまでの平均日数">売掛サイクル</abbr></div>
-      <div class="metric-value">{{ cash_wc.receivables_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
-      <div class="metric-sub">{% if cash_wc.receivables_days <= 45 %}短くて健全{% elif cash_wc.receivables_days <= 60 %}標準{% else %}長め、回収遅延の可能性{% endif %}</div>
+    <div class="col-6 col-md-3"><div class="metric-card c-green">
+      <div class="metric-label">流動比率</div>
+      <div class="metric-value">{% if fd.current_liabilities and fd.current_assets %}{{ "%.1f"|format(fd.current_assets / fd.current_liabilities * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
+      <div class="metric-sub">1年以内の支払い余力（120%以上推奨）</div>
     </div></div>
-    {% endif %}
-    {% if cash_wc.inventory_days %}
-    <div class="col-6 col-md-3"><div class="metric-card c-orange">
-      <div class="metric-label"><abbr class="term" title="在庫を売り切るまでの平均日数">在庫サイクル</abbr></div>
-      <div class="metric-value">{{ cash_wc.inventory_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
-      <div class="metric-sub">{% if cash_wc.inventory_days <= 30 %}回転が早く健全{% elif cash_wc.inventory_days <= 60 %}標準{% else %}長め、滞留の可能性{% endif %}</div>
+    <div class="col-6 col-md-3"><div class="metric-card c-red">
+      <div class="metric-label">負債比率</div>
+      <div class="metric-value">{% if fd.equity and fd.total_liabilities %}{{ "%.1f"|format(fd.total_liabilities / fd.equity * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
+      <div class="metric-sub">100%以下で健全</div>
     </div></div>
-    {% endif %}
-    {% if cash_wc.payables_days %}
-    <div class="col-6 col-md-3"><div class="metric-card c-purple">
-      <div class="metric-label"><abbr class="term" title="買掛金の支払いまでの平均日数">買掛サイクル</abbr></div>
-      <div class="metric-value">{{ cash_wc.payables_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
-      <div class="metric-sub">長いほど資金繰りに有利</div>
-    </div></div>
-    {% endif %}
-    {% if cash_wc.ccc_days %}
     <div class="col-6 col-md-3"><div class="metric-card c-blue">
-      <div class="metric-label"><abbr class="term" title="売掛+在庫-買掛。短いほど資金効率が良い">CCC（運転資本日数）</abbr></div>
-      <div class="metric-value">{{ cash_wc.ccc_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
+      <div class="metric-label">CCC（運転資本日数）</div>
+      <div class="metric-value">{% if cash_wc and cash_wc.ccc_days %}{{ cash_wc.ccc_days }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
       <div class="metric-sub">現金が戻ってくるサイクル</div>
     </div></div>
-    {% endif %}
+    <div class="col-6 col-md-3"><div class="metric-card c-orange">
+      <div class="metric-label">月商キャッシュ倍率</div>
+      <div class="metric-value">{% if cash_wc and cash_wc.cash_months_of_sales %}{{ cash_wc.cash_months_of_sales }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">ヶ月</span></div>
+      <div class="metric-sub">1.5ヶ月以上推奨</div>
+    </div></div>
   </div>
-  {% endif %}
 
   {# 総合スコア #}
   <div class="row g-4 mb-4">
@@ -845,6 +866,17 @@
     {% for n in cash_cf.notes %} {{ n }}{% if not loop.last %}／{% endif %}{% endfor %}
   </div>
   {% endif %}
+  {% endif %}
+
+  {# CF推移グラフ（複数期データある時） #}
+  {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+  <div class="card p-3 mb-4">
+    <h6 class="fw-bold mb-3" style="color:#1A1A2E;"><i class="fas fa-chart-area me-2" style="color:#E81E5C;"></i>現預金・営業利益の推移</h6>
+    <div style="position:relative;height:280px;">
+      <canvas id="cfTrend"></canvas>
+    </div>
+    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>現預金は実額、営業利益は本業の稼ぐ力。両方の推移を比べることで「本業は黒字でも現金が減る／黒字化したのに現金が戻らない」などの違和感が見える。</div>
+  </div>
   {% endif %}
 
   {# 銀行視点ヘルプ — 経営者向け数字の読み方ガイド #}
@@ -1605,11 +1637,17 @@
   function drawPie(canvasId, labels, data) {
     const el = document.getElementById(canvasId);
     if (!el) return;
+    // 親要素に明示的な高さを設定（Chart.js の responsive サイズ計算のため）
+    const parent = el.parentElement;
+    if (parent && !parent.style.height) {
+      parent.style.position = 'relative';
+      parent.style.height = '240px';
+    }
     new Chart(el, {
       type: 'doughnut',
       data: { labels, datasets: [{ data, backgroundColor: PALETTE, borderWidth: 2, borderColor: '#fff' }] },
-      options: { responsive: true, maintainAspectRatio: true,
-        plugins: { legend: { position: 'right', labels: { font: { size: 10 } } },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 12 } },
           tooltip: { callbacks: { label: ctx => {
             const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
             const pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
@@ -1621,6 +1659,33 @@
   {% if rev_items %}drawPie('chartRev', {{ rev_items|map(attribute=0)|list|tojson }}, {{ rev_items|map(attribute=1)|list|tojson }});{% endif %}
   {% if ca_items %}drawPie('chartCA', {{ ca_items|map(attribute=0)|list|tojson }}, {{ ca_items|map(attribute=1)|list|tojson }});{% endif %}
   {% if cl_items %}drawPie('chartCL', {{ cl_items|map(attribute=0)|list|tojson }}, {{ cl_items|map(attribute=1)|list|tojson }});{% endif %}
+
+  // CF推移グラフ（現預金 vs 営業利益）
+  (function() {
+    const el = document.getElementById('cfTrend');
+    if (!el) return;
+    {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+    const labels = {{ result.trend_metrics.periods|tojson }};
+    const cashData = {{ (result.trend_metrics.cash or [])|tojson }};
+    const opData = {{ (result.trend_metrics.operating_profit or [])|tojson }};
+    new Chart(el, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: '現預金（万円）', data: cashData, borderColor: '#1A1A2E', backgroundColor: 'rgba(26,26,46,0.1)', fill: true, tension: 0.3, yAxisID: 'y' },
+          { label: '営業利益（万円）', data: opData, borderColor: '#E81E5C', backgroundColor: 'rgba(232,30,92,0.1)', fill: false, tension: 0.3, yAxisID: 'y' }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          y: { ticks: { callback: v => v.toLocaleString() } }
+        }
+      }
+    });
+    {% endif %}
+  })();
 
   // ========== 改善シミュレーター ==========
   const baseRev = {{ fd.revenue or 0 }};
