@@ -78,14 +78,15 @@
   .c-blue, .c-green, .c-orange, .c-purple, .c-red, .c-teal { --c: var(--rk-black); }
 
   /* ========== バーンレートカード ========== */
-  .burn-card { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-radius: 12px; padding: 16px 18px; border: 1px solid #fecaca; }
-  .burn-card.ok { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-color: #bbf7d0; }
-  .burn-card .burn-label { font-size: .75rem; color: #991b1b; font-weight: 700; }
-  .burn-card.ok .burn-label { color: #15803d; }
-  .burn-card .burn-value { font-size: 1.6rem; font-weight: 800; color: #7f1d1d; }
-  .burn-card.ok .burn-value { color: #14532d; }
-  .burn-card .burn-sub { font-size: .7rem; color: #b91c1c; margin-top: 2px; }
-  .burn-card.ok .burn-sub { color: #166534; }
+  /* バーンレートカード — Raksul流モノクロ化 */
+  .burn-card { background: #fff; border: 1px solid var(--rk-border); border-top: 3px solid var(--rk-accent); border-radius: 8px; padding: 18px 16px; }
+  .burn-card.ok { border-top-color: #16a34a; }
+  .burn-card .burn-label { font-size: .75rem; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .03em; }
+  .burn-card.ok .burn-label { color: var(--rk-text-muted); }
+  .burn-card .burn-value { font-size: 1.7rem; font-weight: 900; color: var(--rk-accent); letter-spacing: -0.01em; margin-top: 6px; }
+  .burn-card.ok .burn-value { color: #16a34a; }
+  .burn-card .burn-sub { font-size: .7rem; color: var(--rk-text-muted); margin-top: 6px; }
+  .burn-card.ok .burn-sub { color: var(--rk-text-muted); }
 
   /* ========== ベンチマーク比較カード（シンプル版） ========== */
   .bench-card { background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); margin-bottom: 10px; border-left: 5px solid var(--rc, #9ca3af); }
@@ -882,8 +883,8 @@
   {% endif %}
 
   {# 銀行視点ヘルプ — 経営者向け数字の読み方ガイド #}
-  <details class="card p-3 mb-4" style="background:#eff6ff;border:1px solid #bfdbfe;">
-    <summary class="fw-bold" style="cursor:pointer;color:#1e3a8a;"><i class="fas fa-university me-1"></i>数字の読み方ガイド（銀行・金融機関の視点）</summary>
+  <details class="card p-3 mb-4" style="background:var(--rk-bg-alt);border:1px solid var(--rk-border);">
+    <summary class="fw-bold" style="cursor:pointer;color:var(--rk-black);"><i class="fas fa-university me-1"></i>数字の読み方ガイド（銀行・金融機関の視点）</summary>
     <div class="mt-3 small" style="color:#1e3a8a;line-height:1.7;">
       <div class="mb-2"><strong>📌 バーンレート</strong>：毎月どれだけ現金が燃えているか。<strong>営業赤字＋借入返済</strong>を月割りした金額。マイナスなら「資金が減る速度」。</div>
       <div class="mb-2"><strong>📌 ランウェイ（資金余力）</strong>：今のペースで現金が尽きるまでの月数。<strong>6ヶ月切ったら危険</strong>。銀行はここを最初に見る。</div>
@@ -931,14 +932,14 @@
   </div>
 
   {% if cash_burn.runway_months or cash_burn.breakeven_required_yearly %}
-  <div class="card p-3 mb-4" style="background: linear-gradient(135deg, #fff7ed, #fef3c7); border: 1px solid #fbbf24;">
-    <h6 class="fw-bold mb-3" style="color:#b45309;"><i class="fas fa-bullseye me-1"></i>黒字化・資金管理ターゲット</h6>
+  <div class="card p-3 mb-4" style="background:var(--rk-bg-alt);border:1px solid var(--rk-border);border-left:3px solid var(--rk-accent);">
+    <h6 class="fw-bold mb-3"><i class="fas fa-bullseye me-1"></i>黒字化・資金管理ターゲット</h6>
     <div class="row g-3">
       {% if cash_burn.breakeven_required_yearly %}
-      <div class="col-md-6"><div class="small text-muted">本業黒字化に必要な年間改善額</div><div class="fs-4 fw-bold" style="color:#c2410c;">+{{ "{:,.0f}".format(cash_burn.breakeven_required_yearly) }}万円/年</div></div>
+      <div class="col-md-6"><div class="small text-muted">本業黒字化に必要な年間改善額</div><div class="fs-4 fw-bold rk-accent">+{{ "{:,.0f}".format(cash_burn.breakeven_required_yearly) }}万円/年</div></div>
       {% endif %}
       {% if cash_burn.runway_months %}
-      <div class="col-md-6"><div class="small text-muted"><abbr class="term" title="ランウェイ：今のペースで現金が尽きるまでの月数。6ヶ月切ったら危険水準">現金ベースの資金余力</abbr>（推計）</div><div class="fs-4 fw-bold" style="color:#c2410c;">約{{ cash_burn.runway_months }}ヶ月</div><div class="small text-muted">※このペースで消えた場合の持続月数</div></div>
+      <div class="col-md-6"><div class="small text-muted"><abbr class="term" title="ランウェイ：今のペースで現金が尽きるまでの月数。6ヶ月切ったら危険水準">現金ベースの資金余力</abbr>（推計）</div><div class="fs-4 fw-bold rk-accent">約{{ cash_burn.runway_months }}ヶ月</div><div class="small text-muted">※このペースで消えた場合の持続月数</div></div>
       {% endif %}
     </div>
   </div>
@@ -1191,10 +1192,10 @@
 
   {# 黒字向け節税アドバイス（applicable=true のときのみ） #}
   {% if result.tax_savings_advice and result.tax_savings_advice.applicable and result.tax_savings_advice.ideas %}
-  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-piggy-bank me-1" style="color:#0e7490;"></i>節税 × 投資判断（黒字社向け）</h6>
-  <div class="card p-3 mb-3" style="background:linear-gradient(135deg,#ecfeff,#cffafe);border:1px solid #06b6d4;">
+  <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-piggy-bank me-1"></i>節税 × 投資判断（黒字社向け）</h6>
+  <div class="card p-3 mb-3" style="background:var(--rk-bg-alt);border:1px solid var(--rk-border);border-left:3px solid var(--rk-black);">
     {% if result.tax_savings_advice.headline %}
-    <div class="fw-bold mb-2" style="color:#155e75;font-size:1.0rem;">💡 {{ result.tax_savings_advice.headline }}</div>
+    <div class="fw-bold mb-2" style="font-size:1.0rem;">💡 {{ result.tax_savings_advice.headline }}</div>
     {% endif %}
     {% if result.tax_savings_advice.strategic_note %}
     <div class="small mb-3" style="color:#0e7490;">{{ result.tax_savings_advice.strategic_note }}</div>
@@ -1493,9 +1494,9 @@
 <div class="cp-tab-panel" id="panel-hearing">
   {% if result.hearing_sheet %}
   {% set saved_ans = client.hearing_answers_dict if client.hearing_answers_dict is defined else {} %}
-  <div class="card p-3 mb-3" style="background:linear-gradient(135deg,#fff7ed,#fef3c7);border:1px solid #fb923c;">
-    <h6 class="fw-bold mb-2" style="color:#9a3412;"><i class="fas fa-clipboard-list me-1"></i>税理士ヒアリングシート — 社長への確認事項に回答を記入</h6>
-    <div class="small" style="color:#7c2d12;">回答を保存すると、次回の AI 分析時にコンテキストとして自動反映され、アドバイスの精度が大幅に向上します。すべて任意・部分回答もOK。</div>
+  <div class="card p-3 mb-3" style="background:var(--rk-bg-alt);border:1px solid var(--rk-border);border-left:3px solid var(--rk-accent);">
+    <h6 class="fw-bold mb-2"><i class="fas fa-clipboard-list me-1"></i>税理士ヒアリングシート — 社長への確認事項に回答を記入</h6>
+    <div class="small text-muted">回答を保存すると、次回の AI 分析時にコンテキストとして自動反映され、アドバイスの精度が大幅に向上します。すべて任意・部分回答もOK。</div>
   </div>
 
   <form method="post" action="/clients/{{ client.id }}/save-hearing">
