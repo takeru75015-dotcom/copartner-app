@@ -180,32 +180,27 @@
 {% elif result %}
 
 {# ========== Key Insight（プロモード） ========== #}
-{% if result.key_insight %}
-<div class="key-insight pro-only">
-  <div class="key-insight-label">💡 最重要ポイント（プロ向け）</div>
-  <div class="key-insight-text">{{ result.key_insight }}</div>
-</div>
-{% endif %}
-
-{# ========== 社長向け1ページサマリ（社長モード） ========== #}
-{% if result.owner_message or result.owner_what_to_do %}
-<div class="card mb-4" style="background:linear-gradient(135deg,#fef9c3,#fef08a);border:3px solid #ca8a04;border-radius:16px;padding:24px;">
-  <div class="d-flex align-items-center mb-3">
-    <span style="font-size:2rem;margin-right:12px;">👔</span>
-    <div>
-      <div class="fw-bold" style="color:#854d0e;font-size:.85rem;letter-spacing:.1em;">社長へのメッセージ</div>
-      <div class="small text-muted">専門用語抜きの易しい言葉で</div>
-    </div>
-  </div>
-  {% if result.owner_message %}
-  <div style="font-size:1.15rem;line-height:1.7;color:#713f12;font-weight:600;margin-bottom:16px;">
-    {{ result.owner_message }}
+{# ========== Raksul風ヒーローセクション（黒背景） ========== #}
+{% if result.key_insight or result.owner_message %}
+<div class="rk-hero">
+  {% if result.key_insight %}
+  <div class="rk-label mb-2"><span style="border-left:3px solid var(--rk-accent);padding-left:8px;">EXECUTIVE SUMMARY — 最重要ポイント</span></div>
+  <div style="font-size:1.4rem;font-weight:800;line-height:1.5;margin-bottom:24px;color:#fff;">
+    {{ result.key_insight }}
   </div>
   {% endif %}
-  {% if result.owner_what_to_do %}
-  <div style="background:#fff;border-radius:8px;padding:14px 18px;border-left:5px solid #16a34a;">
-    <div class="small fw-bold" style="color:#15803d;letter-spacing:.05em;">✅ 今すぐやること</div>
-    <div style="font-size:1.05rem;color:#14532d;margin-top:6px;line-height:1.6;">{{ result.owner_what_to_do }}</div>
+  {% if result.owner_message %}
+  <div style="border-top:1px solid rgba(255,255,255,.15);padding-top:20px;margin-top:8px;">
+    <div class="rk-label mb-2">👔 社長へのメッセージ <span style="opacity:.7;">— 専門用語抜きの易しい言葉で</span></div>
+    <div style="font-size:1.1rem;line-height:1.75;color:#fff;font-weight:500;">
+      {{ result.owner_message }}
+    </div>
+    {% if result.owner_what_to_do %}
+    <div style="background:rgba(255,255,255,.08);border-radius:8px;padding:14px 18px;border-left:4px solid var(--rk-accent);margin-top:14px;">
+      <div class="small fw-bold rk-accent" style="letter-spacing:.05em;">✅ 今すぐやること</div>
+      <div style="font-size:1.05rem;color:#fff;margin-top:6px;line-height:1.6;">{{ result.owner_what_to_do }}</div>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 </div>
@@ -222,8 +217,11 @@
 <div class="cp-tabs" id="cpTabs">
   <div class="cp-tab active" data-tab="overview">📊 数値サマリー</div>
   <div class="cp-tab" data-tab="advice">💡 提案・打ち手</div>
+  <div class="cp-tab" data-tab="services">🛍 提案可能サービス</div>
+  <div class="cp-tab" data-tab="subsidies">🎯 提案可能補助金</div>
+  <div class="cp-tab" data-tab="deepdive">🔬 詳細分析</div>
   <div class="cp-tab" data-tab="hearing">❓ 追加質問・ヒアリング</div>
-  <div class="cp-tab" data-tab="simulator">🎚️ シミュレーター</div>
+  <div class="cp-tab" data-tab="simulator">🎚 シミュレーター</div>
 </div>
 
 {# ========== タブ1：財務概要 ========== #}
@@ -1158,7 +1156,7 @@
   {% endif %}
 
   {# 売上向上アイデア 4つ #}
-  {% if result.revenue_ideas %}
+  {% if false and result.revenue_ideas %}{# 課題→ソリューションと重複のため非表示（2026-05-29 のだけ先生FB） #}
   <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-chart-line me-1" style="color:#ea580c;"></i>売上向上アイデア（{{ result.revenue_ideas|length }}つ）</h6>
   {% for idea in result.revenue_ideas %}
   <div class="idea-card">
@@ -1175,7 +1173,7 @@
   {% endif %}
 
   {# コスト最適化アイデア 3つ #}
-  {% if result.cost_ideas %}
+  {% if false and result.cost_ideas %}{# 課題→ソリューションと重複のため非表示 #}
   <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-scissors me-1 text-danger"></i>コスト最適化アイデア（{{ result.cost_ideas|length }}つ）</h6>
   {% for idea in result.cost_ideas %}
   <div class="cost-card">
@@ -1225,8 +1223,8 @@
   {# 赤字社には何も表示しない（赤字社向けは再生プランで対応） #}
   {% endif %}
 
-  {# アクション提案 #}
-  {% if result.actions %}
+  {# アクション提案 — 課題→ソリューションと重複のため非表示 #}
+  {% if false and result.actions %}
   <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-tasks me-1" style="color:#1a237e;"></i>アクション提案（次の面談でそのまま話せる具体性）</h6>
   {% for action in result.actions %}
   {% set prio_class = 'prio-high' if action.priority == '高' else ('prio-mid' if action.priority == '中' else 'prio-low') %}
@@ -1249,8 +1247,8 @@
   {% endfor %}
   {% endif %}
 
-  {# クロスセル提案 — プロ向け #}
-  {% if result.cross_sell %}
+  {# クロスセル提案 — 非表示（後で詳細分析タブに移動検討） #}
+  {% if false and result.cross_sell %}
   <h6 class="fw-bold text-muted small mb-3 mt-4 pro-only"><i class="fas fa-hand-holding-usd me-1" style="color:#312e81;"></i>顧問料アップの提案ネタ — 税理士→社長へのアップセル切り口（プロ向け）</h6>
   {% for cs in result.cross_sell %}
   <div class="cross-sell-card pro-only">
@@ -1263,8 +1261,8 @@
   {% endfor %}
   {% endif %}
 
-  {# KPI Watch — プロ向け #}
-  {% if result.kpi_watch %}
+  {# KPI Watch — 詳細分析タブに移動予定。一旦非表示 #}
+  {% if false and result.kpi_watch %}
   <h6 class="fw-bold text-muted small mb-3 mt-4 pro-only"><i class="fas fa-tachometer-alt me-1" style="color:#1a237e;"></i>注目すべきKPI（プロ向け）</h6>
   <div class="row g-3 mb-3 pro-only">
     {% for kpi in result.kpi_watch %}
@@ -1281,6 +1279,11 @@
   </div>
   {% endif %}
 
+  {# 提案・打ち手タブはここで終わり。サービス/補助金/詳細分析は別タブに移動 #}
+</div>
+
+{# ========== タブ：提案可能サービス ========== #}
+<div class="cp-tab-panel" id="panel-services">
   {# おすすめサービス（アフィ） #}
   {% if result.recommended_affiliates %}
   <h6 class="fw-bold text-muted small mb-3 mt-4"><i class="fas fa-store me-1" style="color:#0891b2;"></i>おすすめサービス（顧問先に推奨可能なツール・サービス）</h6>
@@ -1354,7 +1357,10 @@
   </div>
   <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>提携パートナーは認定支援機関・独立系保険代理店等。CoPartner は紹介手数料モデルで運営（顧客側に追加負担なし）。</div>
   {% endif %}
+</div>
 
+{# ========== タブ：提案可能補助金 ========== #}
+<div class="cp-tab-panel" id="panel-subsidies">
   {# 補助金・助成金マッチング #}
   {% set sub_items = result.subsidies['items'] if result.subsidies else [] %}
   {% set sub_tags = result.subsidies['issue_tags'] if result.subsidies else [] %}
@@ -1405,11 +1411,81 @@
   </div>
   <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>適合度はあくまで参考。申請可否は各補助金の詳細要件でご確認ください。「申請代行を依頼」ボタンから CoPartner 提携の補助金申請パートナーへ送客できます（成果報酬型・別途ご相談）。</div>
   {% endif %}
-
-  {# ヒアリングシートは「追加質問・ヒアリング」タブに移動 #}
 </div>
 
-{# ========== タブ4：追加質問・ヒアリング ========== #}
+{# ========== タブ：詳細分析（プロ向け深掘り） ========== #}
+<div class="cp-tab-panel" id="panel-deepdive">
+  <div class="card p-4 mb-3" style="background:var(--rk-bg-alt);border:1px solid var(--rk-border);">
+    <h5 class="fw-bold mb-2"><i class="fas fa-microscope me-2" style="color:var(--rk-accent);"></i>詳細分析（プロ向け深掘り）</h5>
+    <div class="small text-muted">業界ベンチマーク・時系列・B/S内訳・KPI Watch・クロスセル切り口など、税理士向けの詳細データ。
+    社長プレゼンには使わず、税理士の追加分析・面談準備に利用。</div>
+  </div>
+
+  {# 業界ベンチマーク（移植元: 数値サマリ） #}
+  {% if result.benchmark and result.benchmark.comparisons %}
+  <div class="card p-3 mb-4">
+    <h6 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2"></i>業界ベンチマーク詳細 — {{ result.benchmark.industry_name }}
+      {% if result.benchmark.scale_tier_label %}<span class="badge ms-2" style="background:var(--rk-black);color:#fff;font-size:.65rem;">{{ result.benchmark.scale_tier_label }}</span>{% endif %}
+    </h6>
+    {% for c in result.benchmark.comparisons %}
+    <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--rk-border);">
+      <div>
+        <div class="fw-bold">{{ c.metric_owner_label or c.metric.split('（')[0] }}</div>
+        <div class="small text-muted">自社 <strong>{{ c.self_value }}{{ c.unit }}</strong> ／ 中央値 {{ c.median }}{{ c.unit }} ／ 上位25% {{ c.top25 }}{{ c.unit }}</div>
+      </div>
+      <span class="badge" style="background:{% if c.rank == 'top25' %}#16a34a{% elif c.rank == 'above_median' %}#84cc16{% elif c.rank == 'below_median' %}#f59e0b{% else %}#dc2626{% endif %};color:#fff;">
+        {% if c.rank == 'top25' %}✨ 上位25%{% elif c.rank == 'above_median' %}⬆ 中央値超{% elif c.rank == 'below_median' %}⬇ 中央値下{% else %}⚠ 下位{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>{{ result.benchmark.source_note }}</div>
+  </div>
+  {% endif %}
+
+  {# KPI Watch（プロ向け） #}
+  {% if result.kpi_watch %}
+  <div class="card p-3 mb-4">
+    <h6 class="fw-bold mb-3"><i class="fas fa-tachometer-alt me-2"></i>注目すべき KPI</h6>
+    <div class="row g-3">
+      {% for kpi in result.kpi_watch %}
+      <div class="col-md-4"><div class="card kpi-card p-3 h-100">
+        <div class="fw-bold small text-uppercase text-muted mb-2">{{ kpi.name }}</div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div><div class="text-muted" style="font-size:.7rem;">現状</div><div class="fw-bold">{{ kpi.current }}</div></div>
+          <i class="fas fa-long-arrow-alt-right text-muted mx-2"></i>
+          <div class="text-end"><div class="text-muted" style="font-size:.7rem;">目標</div><div class="fw-bold rk-accent">{{ kpi.target }}</div></div>
+        </div>
+        <div class="text-muted small">{{ kpi.comment }}</div>
+      </div></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# クロスセル切り口（税理士の営業ネタ） #}
+  {% if result.cross_sell %}
+  <div class="card p-3 mb-4">
+    <h6 class="fw-bold mb-3"><i class="fas fa-hand-holding-usd me-2"></i>顧問料アップの提案ネタ — 税理士→社長への切り口</h6>
+    {% for cs in result.cross_sell %}
+    <div class="cross-sell-card mb-2">
+      {% if cs.category %}<span class="cross-category">{{ cs.category }}</span>{% endif %}
+      <div class="cross-title">{{ cs.title }}</div>
+      <div class="small text-muted mb-2">{{ cs.reason }}</div>
+      {% if cs.price_range %}<div class="cross-price"><i class="fas fa-yen-sign me-1"></i>{{ cs.price_range }}</div>{% endif %}
+      {% if cs.talk_script %}<div class="cross-script"><strong>💬 社長への切り口：</strong>{{ cs.talk_script }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# 強み・課題（AI 総合評価の補足） #}
+  <div class="row g-4 mb-4">
+    <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-thumbs-up me-2 text-success"></i>強み（AI 総合評価）</h6>{% for s in result.strengths %}<div class="strength-item">{{ s }}</div>{% endfor %}</div></div>
+    <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-exclamation-circle me-2" style="color:var(--rk-accent);"></i>課題・リスク（補足）</h6>{% for issue in result.issues %}<div class="issue-item">{{ issue }}</div>{% endfor %}</div></div>
+  </div>
+</div>
+
+{# ========== タブ：追加質問・ヒアリング ========== #}
 <div class="cp-tab-panel" id="panel-hearing">
   {% if result.hearing_sheet %}
   {% set saved_ans = client.hearing_answers_dict if client.hearing_answers_dict is defined else {} %}
