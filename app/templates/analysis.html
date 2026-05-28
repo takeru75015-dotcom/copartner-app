@@ -204,8 +204,7 @@
 
 {# ========== タブ切替 ========== #}
 <div class="cp-tabs" id="cpTabs">
-  <div class="cp-tab active" data-tab="overview">📋 財務概要</div>
-  <div class="cp-tab" data-tab="cash">🔥 キャッシュ診断</div>
+  <div class="cp-tab active" data-tab="overview">📊 数値サマリー</div>
   <div class="cp-tab" data-tab="advice">💡 ビジネスアドバイス</div>
   <div class="cp-tab" data-tab="hearing">❓ 追加質問・ヒアリング</div>
   <div class="cp-tab" data-tab="simulator">🎚️ シミュレーター</div>
@@ -222,8 +221,8 @@
   </div>
   {% endif %}
 
-  {# KPIカード #}
-  <h6 class="fw-bold text-muted small mb-2 mt-2"><i class="fas fa-chart-bar me-1"></i>KPI サマリー</h6>
+  {# ========== PLサマリー ========== #}
+  <h5 class="fw-bold mb-3"><i class="fas fa-chart-line me-2 text-primary"></i>損益計算書（PL）サマリー <span class="small text-muted">— 売上・粗利・営業利益・当期純利益</span></h5>
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
       <div class="metric-card c-blue">
@@ -277,6 +276,40 @@
         {% endif %}
       </div>
     </div>
+  </div>
+
+  {# PL: 費用詳細トグル + 円グラフ #}
+  {% if breakdown and (breakdown.selling_expenses_detail or breakdown.cost_of_sales_detail) %}
+  <details class="card p-3 mb-4">
+    <summary class="fw-bold" style="cursor:pointer;color:#1e3a8a;"><i class="fas fa-chart-pie me-2"></i>費用の内訳を見る（売上原価・販管費）</summary>
+    <div class="row g-3 mt-3">
+      <div class="col-md-6">
+        <canvas id="costPie" style="max-height:280px;"></canvas>
+      </div>
+      <div class="col-md-6">
+        <div class="small fw-bold text-muted mb-2">📋 販管費 内訳 TOP10</div>
+        <table class="table table-sm">
+          <tbody>
+          {% set sed = breakdown.selling_expenses_detail or [] %}
+          {% for item in sed[:10] %}
+          <tr>
+            <td class="small">{{ item.name }}</td>
+            <td class="small text-end fw-bold">{{ "{:,.0f}".format(item.amount or 0) }}万円</td>
+            <td class="small text-end text-muted">{% if fd.revenue %}{{ "%.1f"|format((item.amount or 0) / fd.revenue * 100) }}%{% endif %}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+  {% endif %}
+
+  {# ========== BSサマリー ========== #}
+  <div class="my-4 pt-3" style="border-top:3px solid #f3f4f6;">
+    <h5 class="fw-bold mb-3"><i class="fas fa-balance-scale me-2 text-info"></i>貸借対照表（BS）サマリー <span class="small text-muted">— 資本・負債・売掛/買掛サイクル</span></h5>
+  </div>
+  <div class="row g-3 mb-3">
     {% if fd.total_assets > 0 %}
     <div class="col-6 col-md-3"><div class="metric-card c-teal">
       <div class="metric-label">総資産</div>
@@ -306,12 +339,45 @@
       <div class="metric-value">{{ "{:,.0f}".format(fd.interest_bearing_debt) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
       {% if result.growth_rates and result.growth_rates.interest_bearing_debt is not none %}
         {% set g = result.growth_rates.interest_bearing_debt %}
-        {# 借入が増えるのは原則 down 表記（赤）。減るのは up 表記（緑） #}
         <div class="metric-delta {% if g <= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g <= 0 %}arrow-down{% else %}arrow-up{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">金利が発生する借入</div>{% endif %}
     </div></div>
     {% endif %}
   </div>
+
+  {# 売掛・買掛・在庫サイクル #}
+  {% if cash_wc and (cash_wc.receivables_days or cash_wc.inventory_days) %}
+  <div class="row g-3 mb-3">
+    {% if cash_wc.receivables_days %}
+    <div class="col-6 col-md-3"><div class="metric-card c-orange">
+      <div class="metric-label"><abbr class="term" title="売上が現金になるまでの平均日数">売掛サイクル</abbr></div>
+      <div class="metric-value">{{ cash_wc.receivables_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
+      <div class="metric-sub">{% if cash_wc.receivables_days <= 45 %}短くて健全{% elif cash_wc.receivables_days <= 60 %}標準{% else %}長め、回収遅延の可能性{% endif %}</div>
+    </div></div>
+    {% endif %}
+    {% if cash_wc.inventory_days %}
+    <div class="col-6 col-md-3"><div class="metric-card c-orange">
+      <div class="metric-label"><abbr class="term" title="在庫を売り切るまでの平均日数">在庫サイクル</abbr></div>
+      <div class="metric-value">{{ cash_wc.inventory_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
+      <div class="metric-sub">{% if cash_wc.inventory_days <= 30 %}回転が早く健全{% elif cash_wc.inventory_days <= 60 %}標準{% else %}長め、滞留の可能性{% endif %}</div>
+    </div></div>
+    {% endif %}
+    {% if cash_wc.payables_days %}
+    <div class="col-6 col-md-3"><div class="metric-card c-purple">
+      <div class="metric-label"><abbr class="term" title="買掛金の支払いまでの平均日数">買掛サイクル</abbr></div>
+      <div class="metric-value">{{ cash_wc.payables_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
+      <div class="metric-sub">長いほど資金繰りに有利</div>
+    </div></div>
+    {% endif %}
+    {% if cash_wc.ccc_days %}
+    <div class="col-6 col-md-3"><div class="metric-card c-blue">
+      <div class="metric-label"><abbr class="term" title="売掛+在庫-買掛。短いほど資金効率が良い">CCC（運転資本日数）</abbr></div>
+      <div class="metric-value">{{ cash_wc.ccc_days }}<span style="font-size:.7em;color:#9ca3af;">日</span></div>
+      <div class="metric-sub">現金が戻ってくるサイクル</div>
+    </div></div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   {# 総合スコア #}
   <div class="row g-4 mb-4">
@@ -693,10 +759,11 @@
     <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-thumbs-up me-2 text-success"></i>強み（AI 総合評価）</h6>{% for s in result.strengths %}<div class="strength-item">{{ s }}</div>{% endfor %}</div></div>
     <div class="col-md-6"><div class="card p-3 h-100"><h6 class="fw-bold mb-3"><i class="fas fa-exclamation-circle me-2 text-danger"></i>課題・リスク（補足）</h6>{% for issue in result.issues %}<div class="issue-item">{{ issue }}</div>{% endfor %}</div></div>
   </div>
-</div>
 
-{# ========== タブ2：キャッシュ診断 ========== #}
-<div class="cp-tab-panel" id="panel-cash">
+  {# ========== CFサマリー（数値サマリータブの一部） ========== #}
+  <div class="my-4 pt-3" style="border-top:3px solid #f3f4f6;">
+    <h5 class="fw-bold mb-3"><i class="fas fa-fire me-2 text-danger"></i>キャッシュフロー（CF）サマリー</h5>
+  </div>
 
   {# 銀行視点ヘルプ — 経営者向け数字の読み方ガイド #}
   <details class="card p-3 mb-4" style="background:#eff6ff;border:1px solid #bfdbfe;">
@@ -815,7 +882,7 @@
   </div>
 </div>
 
-{# ========== タブ3：ビジネスアドバイス ========== #}
+{# ========== タブ2：ビジネスアドバイス ========== #}
 <div class="cp-tab-panel" id="panel-advice">
 
   {# 統合再生プラン — プロ向け #}
@@ -1279,10 +1346,54 @@
 (function() {
   // 表示モード切替（社長向け/プロ向け）
   const modeBtns = document.querySelectorAll('#modeSwitch button');
+  // 数字を社長向けにまるめる（1,234→1,200、12.5%→13%）
+  function roundForOwner(num, type) {
+    if (num === null || num === undefined || isNaN(num)) return num;
+    const n = Number(num);
+    if (type === 'pct') {
+      // パーセントは整数に
+      return Math.round(n);
+    }
+    // 金額（万円単位想定）：桁数に応じて丸める
+    const abs = Math.abs(n);
+    if (abs >= 10000) {
+      // 1億以上 → 千万円単位
+      return Math.round(n / 1000) * 1000;
+    } else if (abs >= 1000) {
+      // 1千万以上 → 百万円単位
+      return Math.round(n / 100) * 100;
+    } else if (abs >= 100) {
+      // 100万以上 → 10万円単位
+      return Math.round(n / 10) * 10;
+    }
+    return Math.round(n);
+  }
+  function formatNum(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    return Number(n).toLocaleString('ja-JP');
+  }
+  function applyRounding(isSimple) {
+    document.querySelectorAll('[data-num]').forEach(el => {
+      const raw = parseFloat(el.getAttribute('data-num'));
+      const type = el.getAttribute('data-num-type') || 'yen';
+      const unit = el.getAttribute('data-num-unit') || '';
+      const sign = el.getAttribute('data-num-sign') === '1';
+      if (isSimple) {
+        const rounded = roundForOwner(raw, type);
+        const s = (sign && rounded > 0 ? '+' : '') + (type === 'pct' ? rounded : formatNum(rounded));
+        el.textContent = s + unit;
+      } else {
+        const s = (sign && raw > 0 ? '+' : '') + (type === 'pct' ? raw.toFixed(1) : formatNum(raw));
+        el.textContent = s + unit;
+      }
+    });
+  }
+
   function applyMode(mode) {
     document.body.classList.toggle('mode-simple', mode === 'simple');
     modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
     try { localStorage.setItem('cp_mode', mode); } catch(e) {}
+    applyRounding(mode === 'simple');
   }
   modeBtns.forEach(b => b.addEventListener('click', () => applyMode(b.dataset.mode)));
   // 初期モード（保存があれば復元、なければ社長向け）
@@ -1445,6 +1556,26 @@
   const periods = {{ (result.trend_metrics.periods or [])|tojson }};
 
   // 1. 売上 & 営業利益（同じ単位=万円、共通軸でOK）
+  // 費用円グラフ（販管費 TOP10 + その他）
+  (function() {
+    const el = document.getElementById('costPie');
+    if (!el) return;
+    const items = {{ (breakdown.selling_expenses_detail or [])|tojson }};
+    if (!items || items.length === 0) return;
+    const sorted = items.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    const top = sorted.slice(0, 10);
+    const others = sorted.slice(10).reduce((s, x) => s + (x.amount || 0), 0);
+    const labels = top.map(x => x.name);
+    const values = top.map(x => x.amount || 0);
+    if (others > 0) { labels.push('その他'); values.push(others); }
+    const colors = ['#ef4444','#f59e0b','#22c55e','#3b82f6','#a855f7','#06b6d4','#ec4899','#14b8a6','#84cc16','#f97316','#9ca3af'];
+    new Chart(el, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors }] },
+      options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { size: 10 } } } } }
+    });
+  })();
+
   drawLine('trendRevProfit', periods, [
     { label: '売上高', data: {{ (result.trend_metrics.revenue or [])|tojson }}, color: '#3b82f6' },
     { label: '営業利益', data: {{ (result.trend_metrics.operating_profit or [])|tojson }}, color: '#f59e0b' }
