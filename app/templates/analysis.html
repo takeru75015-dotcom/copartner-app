@@ -843,45 +843,31 @@
   {# ========== CFサマリー（数値サマリータブの一部） ========== #}
   <div class="rk-section-title mt-5"><span class="rk-section-bar"></span>キャッシュフロー（CF）サマリー <span class="small text-muted ms-2" style="font-weight:500;">— 現金の流れと推移</span></div>
 
-  {# CF 4バケツ（営業/投資/財務/フリー） #}
-  {% if cash_cf %}
+  {# CFは推定が当てにならないため、実数値のみ表示（Takeru FB 2026-05-29） #}
+  {% if cash_cf and cash_cf.cash_change is not none %}
   <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#16a34a;">
-      <div class="metric-label">営業CF（推定）</div>
-      <div class="metric-value {% if cash_cf.operating_cf < 0 %}text-danger{% endif %}">{{ "{:+,.0f}".format(cash_cf.operating_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      <div class="metric-sub">本業で生まれた現金</div>
+    <div class="col-6 col-md-4"><div class="metric-card">
+      <div class="metric-label">💰 現預金 期末残高</div>
+      <div class="metric-value">{{ "{:,.0f}".format(fd.cash) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">{% if fd.revenue > 0 %}月商 {{ "%.1f"|format(fd.cash / (fd.revenue / 12)) }}ヶ月分{% else %}—{% endif %}</div>
     </div></div>
-    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#3b82f6;">
-      <div class="metric-label">投資CF（推定）</div>
-      <div class="metric-value">{{ "{:+,.0f}".format(cash_cf.investing_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      <div class="metric-sub">設備投資等で使った現金</div>
+    <div class="col-6 col-md-4"><div class="metric-card {% if cash_cf.cash_change < 0 %}has-issue{% endif %}">
+      <div class="metric-label">📉 前期比 増減</div>
+      <div class="metric-value {% if cash_cf.cash_change < 0 %}text-danger{% endif %}">{{ "{:+,.0f}".format(cash_cf.cash_change) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">{% if cash_cf.cash_change < 0 %}1年で {{ "{:,.0f}".format((cash_cf.cash_change|abs) / 12) }}万円/月のペースで流出{% else %}増加{% endif %}</div>
     </div></div>
-    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#a855f7;">
-      <div class="metric-label">財務CF（推定）</div>
-      <div class="metric-value">{{ "{:+,.0f}".format(cash_cf.financing_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      <div class="metric-sub">借入の増減</div>
+    {% if cash_burn and cash_burn.runway_months %}
+    <div class="col-6 col-md-4"><div class="metric-card {% if cash_burn.runway_months < 12 %}has-issue{% endif %}">
+      <div class="metric-label">⏱ 資金余力（推計）</div>
+      <div class="metric-value">約{{ cash_burn.runway_months }}<span style="font-size:.7em;color:#9ca3af;">ヶ月</span></div>
+      <div class="metric-sub">現在のペースで現金が尽きるまで</div>
     </div></div>
-    <div class="col-6 col-md-3"><div class="metric-card" style="--c:#f59e0b;">
-      <div class="metric-label">🔥 フリーCF（推定）</div>
-      <div class="metric-value {% if cash_cf.free_cf < 0 %}text-danger{% endif %}">{{ "{:+,.0f}".format(cash_cf.free_cf or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      <div class="metric-sub">営業CF＋投資CF（自由に使える現金）</div>
-    </div></div>
+    {% endif %}
   </div>
-  {% if cash_cf.cash_change is not none %}
-  <div class="card p-3 mb-3" style="background:#f9fafb;">
-    <div class="row g-2 small align-items-center">
-      <div class="col-md-4"><span class="text-muted">現預金 期末残高</span> <strong>{{ "{:,.0f}".format(fd.cash) }}万円</strong></div>
-      <div class="col-md-4"><span class="text-muted">前期比 増減</span> <strong class="{% if cash_cf.cash_change < 0 %}text-danger{% else %}text-success{% endif %}">{{ "{:+,.0f}".format(cash_cf.cash_change) }}万円</strong></div>
-      <div class="col-md-4"><span class="text-muted">減価償却（推定）</span> {{ "{:,.0f}".format(cash_cf.depreciation or 0) }}万円</div>
-    </div>
+  <div class="small text-muted mb-3" style="background:#f9fafb;border-left:3px solid var(--rk-border);padding:8px 12px;border-radius:4px;">
+    <i class="fas fa-info-circle me-1"></i>
+    <strong>CF計算書について：</strong>営業CF/投資CF/財務CF/フリーCFの正確な値は決算書のCF計算書（または月次CF表）が必要です。決算書PDFからは推計しか出せないため、本ツールでは <strong>実数値（現預金残高と前期比増減）</strong>のみ表示しています。
   </div>
-  {% endif %}
-  {% if cash_cf.notes %}
-  <div class="small text-muted mb-3" style="background:#fffbeb;border-left:3px solid #fbbf24;padding:6px 10px;border-radius:4px;">
-    <i class="fas fa-info-circle me-1"></i><strong>推計前提:</strong>
-    {% for n in cash_cf.notes %} {{ n }}{% if not loop.last %}／{% endif %}{% endfor %}
-  </div>
-  {% endif %}
   {% endif %}
 
   {# CF推移グラフ（複数期データある時） #}
