@@ -22,6 +22,9 @@ def migrate():
 
     # users.referral_code（アフィ紹介ID）
     _add_column(cursor, "users", "referral_code", "TEXT DEFAULT ''")
+    # users.excluded_categories（除外したいアフィカテゴリ）/ own_partners（自前提携先）
+    _add_column(cursor, "users", "excluded_categories", "TEXT DEFAULT '[]'")
+    _add_column(cursor, "users", "own_partners", "TEXT DEFAULT '{}'")
     # 既存ユーザーに referral_code を発番（空の場合）
     try:
         import secrets

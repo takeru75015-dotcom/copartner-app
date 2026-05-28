@@ -9,6 +9,7 @@ from typing import Optional, List
 from pathlib import Path
 from dotenv import load_dotenv
 from http.cookies import SimpleCookie
+from urllib.parse import quote
 
 load_dotenv()
 
@@ -26,7 +27,7 @@ from .claude_client import (
 
 BASE_DIR = Path(__file__).parent
 
-app = FastAPI(title="財務KPI分析 for 税理士")
+app = FastAPI(title="CoPartner — 税理士のためのAI財務分析")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
@@ -508,9 +509,10 @@ def client_detail(client_id: int, request: Request, db: Session = Depends(get_db
     financials = db.query(FinancialData).filter(FinancialData.client_id == client_id).order_by(FinancialData.created_at.desc()).all()
     quality_issues = _check_data_quality(financials)
     msg = request.query_params.get("msg", "")
+    error = request.query_params.get("error", "")
     return templates.TemplateResponse("client.html", {
         "request": request, "user": user, "client": cl,
-        "financials": financials, "quality_issues": quality_issues, "msg": msg,
+        "financials": financials, "quality_issues": quality_issues, "msg": msg, "error": error,
     })
 
 @app.post("/clients/{client_id}/delete")
@@ -721,10 +723,18 @@ def compare_page(client_id: int, request: Request, ids: str = "", errors: str = 
         return RedirectResponse("/dashboard", status_code=302)
 
     fd_ids = [int(i) for i in ids.split(",") if i.strip().isdigit()]
-    financials = db.query(FinancialData).filter(FinancialData.id.in_(fd_ids)).order_by(FinancialData.period).all()
+    # IDOR対策: client_id でも絞り込む。他人の財務データIDを ?ids= で混ぜられても弾く
+    financials = (
+        db.query(FinancialData)
+        .filter(FinancialData.client_id == client_id, FinancialData.id.in_(fd_ids))
+        .order_by(FinancialData.period)
+        .all()
+    )
 
-    if not financials:
-        return RedirectResponse(f"/clients/{client_id}", status_code=302)
+    if len(financials) < 2:
+        from urllib.parse import quote
+        err = "比較するには、下の「登録済みの期データ」から2つ以上の期を選択して「全期間を比較分析」を押してください。"
+        return RedirectResponse(f"/clients/{client_id}?error={quote(err)}", status_code=302)
 
     # 複数年分析（キャッシュなし・毎回実行）
     try:
@@ -810,11 +820,17 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             pass
         merged_bd = (base_bd + hearing_text).strip()
 
+        # 税理士の除外カテゴリ設定を読み込み
+        try:
+            user_excluded = json.loads(getattr(user, "excluded_categories", "[]") or "[]")
+        except Exception:
+            user_excluded = []
         result = analyze_financials(
             fd, cl.name, cl.industry,
             business_details=merged_bd,
             historical_data=all_fds_for_client if len(all_fds_for_client) > 1 else None,
             referral_code=getattr(user, "referral_code", "") or f"tax_{user.id:03d}",
+            excluded_categories=user_excluded,
         )
         analysis = Analysis(financial_data_id=fd_id, result_json=json.dumps(result, ensure_ascii=False))
         db.add(analysis); db.commit(); db.refresh(analysis)
@@ -899,30 +915,120 @@ def reanalyze(fd_id: int, request: Request, db: Session = Depends(get_db)):
     return RedirectResponse(f"/financials/{fd.id}/analyze", status_code=302)
 
 
-@app.get("/partner-referral", response_class=HTMLResponse)
-def partner_referral(request: Request, type: str = "", title: str = "", client: int = 0, db: Session = Depends(get_db)):
-    """金融・保険パートナーへの送客導線"""
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=302)
+    try:
+        excluded = json.loads(user.excluded_categories or "[]")
+    except Exception:
+        excluded = []
+    try:
+        own_partners = json.loads(user.own_partners or "{}")
+    except Exception:
+        own_partners = {}
+    # 利用可能なカテゴリリスト（affiliates.jsonから抽出）
+    aff_path = BASE_DIR / "data" / "affiliates.json"
+    categories = []
+    try:
+        with open(aff_path, encoding="utf-8") as f:
+            data = json.load(f)
+        seen = set()
+        for a in data.get("affiliates", []):
+            c = a.get("category")
+            if c and c not in seen:
+                categories.append(c)
+                seen.add(c)
+    except Exception:
+        pass
+    return templates.TemplateResponse("settings.html", {
+        "request": request, "user": user,
+        "excluded": excluded, "own_partners": own_partners,
+        "categories": categories,
+    })
+
+
+@app.post("/settings/save")
+async def settings_save(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    form = await request.form()
+    # 除外カテゴリ（チェックボックスで複数選択）
+    excluded = form.getlist("excluded[]") if hasattr(form, "getlist") else []
+    if not excluded:
+        # multi-value fields fallback
+        excluded = [v for k, v in form.multi_items() if k == "excluded[]"] if hasattr(form, "multi_items") else []
+    user.excluded_categories = json.dumps(excluded, ensure_ascii=False)
+    # 自前提携先（簡易：カテゴリ別に name|email|note を 1行ずつ）
+    own_partners_raw = form.get("own_partners_raw", "")
+    own = {}
+    for line in (own_partners_raw or "").splitlines():
+        line = line.strip()
+        if not line or "|" not in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) >= 2:
+            cat = parts[0]
+            name = parts[1]
+            email = parts[2] if len(parts) > 2 else ""
+            note = parts[3] if len(parts) > 3 else ""
+            own.setdefault(cat, []).append({"name": name, "email": email, "note": note})
+    user.own_partners = json.dumps(own, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse("/settings?ok=1", status_code=302)
+
+
+@app.get("/partner-referral", response_class=HTMLResponse)
+def partner_referral(request: Request, type: str = "", title: str = "", client: int = 0, db: Session = Depends(get_db)):
+    """提携パートナー紹介（税理士が自前 or CoPartner 提携先から選択）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+
+    # 自前の提携先（カテゴリで絞り込み）
+    try:
+        own = json.loads(getattr(user, "own_partners", "{}") or "{}")
+    except Exception:
+        own = {}
+    own_partner_list = own.get(type, []) if type else []
+
+    # CoPartner 提携先候補（同カテゴリの複数候補）
+    copartner_candidates = []
+    try:
+        aff_path = BASE_DIR / "data" / "affiliates.json"
+        with open(aff_path, encoding="utf-8") as f:
+            data = json.load(f)
+        ref = getattr(user, "referral_code", "") or f"tax_{user.id:03d}"
+        for a in data.get("affiliates", []):
+            if a.get("category") == type and a.get("active", True):
+                copartner_candidates.append({
+                    "name": a["name"],
+                    "vendor": a.get("vendor", ""),
+                    "category": a["category"],
+                    "description": a.get("description", ""),
+                    "match_score": int(a.get("trust_score", 3)) * 20,
+                    "url": (a.get("url_base") or "").replace("{ref}", ref),
+                })
+    except Exception:
+        pass
+
     return templates.TemplateResponse("partner_referral.html", {
         "request": request,
         "user": user,
         "partner_type": type,
         "title_text": title,
         "client_id": client,
+        "own_partner_list": own_partner_list,
+        "copartner_candidates": copartner_candidates,
     })
 
 
 @app.get("/subsidy-referral", response_class=HTMLResponse)
 def subsidy_referral(request: Request, subsidy: str = "", client: int = 0, db: Session = Depends(get_db)):
-    """補助金申請代行パートナーへの送客導線（提携先未確定のため申込フォーム）"""
-    user = get_current_user(request, db)
-    if not user:
-        return RedirectResponse("/login", status_code=302)
-    return templates.TemplateResponse("subsidy_referral.html", {
-        "request": request,
-        "user": user,
-        "subsidy_name": subsidy,
-        "client_id": client,
-    })
+    """補助金申請代行への送客（partner-referral の補助金代行カテゴリにリダイレクト）"""
+    return RedirectResponse(
+        f"/partner-referral?type={quote('補助金代行')}&title={quote(subsidy or '補助金申請代行')}&client={client}",
+        status_code=302,
+    )

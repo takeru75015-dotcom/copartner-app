@@ -14,6 +14,8 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     display_name = Column(String, default="")
     referral_code = Column(String, default="", index=True)  # アフィ紹介ID（税理士ごとに発行）
+    excluded_categories = Column(Text, default="[]")  # 除外したいアフィカテゴリのJSON配列（例：["法人保険","補助金代行"]）
+    own_partners = Column(Text, default="{}")  # 自前で持ってる提携先 {カテゴリ: [{name, email, note}, ...]}
     created_at = Column(DateTime, default=datetime.utcnow)
     clients = relationship("Client", back_populates="owner", cascade="all, delete-orphan")
 

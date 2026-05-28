@@ -67,7 +67,8 @@ def _matches(aff: Dict, issue_tags: List[str], revenue: float,
 
 
 def match_affiliates_for_issue(issue_tags: List[str], fd, industry: str = "",
-                                referral_code: str = "", limit: int = 3) -> List[Dict]:
+                                referral_code: str = "", limit: int = 3,
+                                excluded_categories: List[str] = None) -> List[Dict]:
     """
     課題タグに合致するアフィ商品を抽出。
 
@@ -97,9 +98,13 @@ def match_affiliates_for_issue(issue_tags: List[str], fd, industry: str = "",
     net_profit = getattr(fd, "net_profit", 0) or 0
     is_profitable = operating_profit > 0 and net_profit > 0
 
+    excluded_set = set(excluded_categories or [])
     affiliates = _load_affiliates()
     candidates = []
     for aff in affiliates:
+        # 税理士の除外設定に該当するカテゴリはスキップ（のだけ先生FB対応）
+        if aff.get("category") in excluded_set:
+            continue
         ok, score = _matches(aff, issue_tags, revenue, industry, is_profitable)
         if not ok:
             continue
@@ -243,7 +248,8 @@ def derive_issue_tags_from_result(result: Dict, fd) -> List[str]:
 
 
 def attach_affiliates_to_result(result: Dict, fd, industry: str = "",
-                                  referral_code: str = "") -> Dict:
+                                  referral_code: str = "",
+                                  excluded_categories: List[str] = None) -> Dict:
     """
     AI 分析結果にアフィ推薦を埋め込んで返す。
     結果に result["recommended_affiliates"] と
@@ -252,9 +258,11 @@ def attach_affiliates_to_result(result: Dict, fd, industry: str = "",
     issue_tags = derive_issue_tags_from_result(result, fd)
     result["affiliate_issue_tags"] = issue_tags
 
-    # 全体推薦（5件まで）
+    # 全体推薦（5件まで、除外カテゴリ反映）
     result["recommended_affiliates"] = match_affiliates_for_issue(
-        issue_tags, fd, industry, referral_code, limit=5
+        issue_tags, fd, industry, referral_code, limit=5,
+        excluded_categories=excluded_categories or []
     )
+    result["excluded_categories"] = excluded_categories or []
 
     return result
