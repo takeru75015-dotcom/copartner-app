@@ -790,6 +790,15 @@ def analyze_financials(fd: FinancialData, client_name: str, industry: str,
         trend_metrics["cash"] = [h.cash for h in sorted_hd]
         trend_metrics["receivables"] = [h.receivables for h in sorted_hd]
         trend_metrics["inventory"] = [h.inventory for h in sorted_hd]
+        # PL/BS 積み上げ棒グラフ用（北村先生FB対応）
+        trend_metrics["cost_of_sales"] = [h.cost_of_sales or 0 for h in sorted_hd]
+        trend_metrics["gross_profit"] = [h.gross_profit or 0 for h in sorted_hd]
+        trend_metrics["selling_expenses"] = [h.selling_expenses or 0 for h in sorted_hd]
+        trend_metrics["total_assets"] = [h.total_assets or 0 for h in sorted_hd]
+        trend_metrics["equity"] = [h.equity or 0 for h in sorted_hd]
+        trend_metrics["interest_bearing_debt"] = [h.interest_bearing_debt or 0 for h in sorted_hd]
+        trend_metrics["total_liabilities"] = [h.total_liabilities or 0 for h in sorted_hd]
+        trend_metrics["current_liabilities"] = [h.current_liabilities or 0 for h in sorted_hd]
 
         # 前期比成長率（最初の期は null）
         def _growth(arr):
