@@ -21,47 +21,79 @@
   .pdf-cover .label { font-size: 13px; letter-spacing: .15em; color: #94a3b8; border-left: 3px solid var(--rk-accent); padding-left: 10px; margin-bottom: 24px; }
   .pdf-cover h1 { color: #fff; font-size: 38px; margin-bottom: 8px; line-height: 1.3; }
   .pdf-cover .period { font-size: 18px; color: #cbd5e1; margin-bottom: 32px; }
-  .pdf-cover .subtitle { font-size: 22px; color: #fff; font-weight: 600; line-height: 1.6; max-width: 700px; }
+  .pdf-cover .subtitle { font-size: 22px; color: #fff; font-weight: 600; line-height: 1.6; max-width: 800px; }
   .pdf-cover .footer { margin-top: 60px; font-size: 12px; color: #94a3b8; }
 
-  /* セクション見出し */
+  /* セクション */
   .pdf-section { margin: 48px 0 32px; page-break-before: always; }
-  .pdf-section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid var(--rk-black); }
+  .pdf-section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid var(--rk-black); }
   .pdf-section-title .bar { width: 5px; height: 28px; background: var(--rk-accent); }
+  .pdf-section-title .num { background: var(--rk-accent); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 700; min-width: 36px; text-align: center; }
   .pdf-section-title h2 { font-size: 22px; margin: 0; }
-  .pdf-section-title .num { background: var(--rk-accent); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 700; }
+  .pdf-section-headline { font-size: 16px; font-weight: 700; color: var(--rk-black); margin-bottom: 16px; padding: 12px 18px; background: var(--rk-bg-alt); border-left: 4px solid var(--rk-accent); }
 
-  /* ナラティブテキスト */
-  .narrative { background: #fff; padding: 0; font-size: 14px; line-height: 1.9; }
-  .narrative.lead { font-size: 16px; font-weight: 500; }
+  /* KPI数字行 */
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 20px 0; }
+  .kpi-card { background: #fff; border: 1px solid var(--rk-border); border-top: 3px solid var(--rk-black); border-radius: 6px; padding: 16px 14px; }
+  .kpi-card .label { font-size: 11px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .03em; }
+  .kpi-card .value { font-size: 22px; font-weight: 900; color: var(--rk-black); margin: 6px 0 4px; line-height: 1; letter-spacing: -0.01em; }
+  .kpi-card .delta { font-size: 11px; font-weight: 600; }
+  .kpi-card .delta.up { color: #16a34a; }
+  .kpi-card .delta.down { color: var(--rk-accent); }
 
-  /* キーナンバーズ */
-  .key-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 24px 0; }
-  .key-num-card { background: #fff; border: 1px solid var(--rk-border); border-top: 4px solid var(--rk-black); border-radius: 6px; padding: 20px 18px; }
-  .key-num-card .label { font-size: 11px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .03em; }
-  .key-num-card .value { font-size: 28px; font-weight: 900; color: var(--rk-black); margin: 8px 0; line-height: 1; }
-  .key-num-card .comment { font-size: 12px; color: var(--rk-text-muted); line-height: 1.5; }
+  /* 強み */
+  .strength-block { background: var(--rk-bg-alt); border-left: 4px solid #16a34a; border-radius: 6px; padding: 16px 22px; margin-bottom: 10px; }
+  .strength-block .title { font-size: 14px; font-weight: 800; color: var(--rk-black); margin-bottom: 4px; }
+  .strength-block .evidence { font-size: 13px; color: var(--rk-black); margin-bottom: 4px; }
+  .strength-block .implication { font-size: 12px; color: var(--rk-text-muted); line-height: 1.6; }
 
-  /* 強み・課題・提案ブロック */
-  .pdf-block { background: var(--rk-bg-alt); border-radius: 6px; padding: 24px 28px; margin: 16px 0; border-left: 4px solid var(--rk-black); }
-  .pdf-block.strengths { border-left-color: #16a34a; }
-  .pdf-block.issues { border-left-color: var(--rk-accent); }
-  .pdf-block.proposal { border-left-color: var(--rk-black); }
-  .pdf-block.outlook { border-left-color: #16a34a; background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid #16a34a; }
+  /* 課題 */
+  .issue-card { background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid var(--rk-accent); border-radius: 6px; padding: 18px 22px; margin-bottom: 12px; }
+  .issue-card .rank { display: inline-block; background: var(--rk-accent); color: #fff; padding: 2px 8px; font-size: 11px; font-weight: 700; border-radius: 3px; margin-right: 8px; }
+  .issue-card .title { font-size: 15px; font-weight: 800; color: var(--rk-black); display: inline; }
+  .issue-card .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 12px; }
+  .issue-card .row3 .col { background: var(--rk-bg-alt); padding: 10px 12px; border-radius: 4px; }
+  .issue-card .row3 .col .col-label { font-size: 10px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .05em; margin-bottom: 4px; }
+  .issue-card .row3 .col .col-text { font-size: 12px; color: var(--rk-black); line-height: 1.65; }
 
-  /* 次の一歩リスト */
-  .next-actions { list-style: none; padding: 0; }
-  .next-actions li { background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid var(--rk-accent); padding: 14px 18px; margin-bottom: 10px; border-radius: 6px; font-size: 14px; line-height: 1.6; }
-  .next-actions li::before { content: "✓"; color: var(--rk-accent); font-weight: 800; margin-right: 10px; }
+  /* 提案セクション */
+  .proposal-issue-header { background: var(--rk-black); color: #fff; padding: 12px 18px; border-radius: 6px 6px 0 0; }
+  .proposal-issue-header .label { font-size: 11px; color: #94a3b8; font-weight: 700; }
+  .proposal-issue-header .title { font-size: 16px; font-weight: 800; }
+  .proposal-issue-intro { background: var(--rk-bg-alt); padding: 10px 18px; font-size: 13px; color: var(--rk-text-muted); border-left: 4px solid var(--rk-black); margin-bottom: 12px; }
+  .solution-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .solution-card { background: #fff; border: 1px solid var(--rk-border); border-radius: 6px; padding: 16px 20px; }
+  .solution-card .title { font-size: 14px; font-weight: 800; color: var(--rk-black); margin-bottom: 8px; }
+  .solution-card .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 10px 0; }
+  .solution-card .meta-cell { background: var(--rk-bg-alt); padding: 8px 10px; border-radius: 4px; }
+  .solution-card .meta-label { font-size: 10px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .03em; }
+  .solution-card .meta-value { font-size: 13px; font-weight: 700; color: var(--rk-black); margin-top: 2px; }
+  .solution-card .meta-value.effect { color: #16a34a; }
+  .solution-card .first-step, .solution-card .why { font-size: 11px; color: var(--rk-text-muted); line-height: 1.6; margin-top: 6px; }
+  .solution-card .first-step strong, .solution-card .why strong { color: var(--rk-black); }
 
-  /* 締めの挨拶 */
-  .pdf-closing { background: var(--rk-black); color: #fff; padding: 32px 36px; border-radius: 0; margin-top: 48px; font-size: 15px; line-height: 1.9; text-align: center; }
+  /* 節税 */
+  .tax-card { background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid #16a34a; border-radius: 6px; padding: 14px 18px; margin-bottom: 10px; }
+  .tax-card .title { font-size: 14px; font-weight: 800; color: var(--rk-black); margin-bottom: 4px; }
+  .tax-card .row3 { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px; margin-top: 8px; font-size: 11px; }
+  .tax-card .row3 .label { color: var(--rk-text-muted); font-weight: 700; }
+  .tax-card .row3 .value { color: var(--rk-black); font-weight: 700; }
+
+  /* まとめ */
+  .conclusion-block { background: #fff; border: 1px solid var(--rk-border); border-radius: 8px; padding: 24px 28px; margin-bottom: 14px; }
+  .conclusion-block.positive { border-left: 4px solid #16a34a; }
+  .conclusion-block.next { border-left: 4px solid var(--rk-accent); }
+  .conclusion-block .label { font-size: 12px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .05em; margin-bottom: 6px; }
+  .conclusion-block .text { font-size: 14px; line-height: 1.85; color: var(--rk-black); }
+
+  .pdf-closing { background: var(--rk-black); color: #fff; padding: 28px 36px; border-radius: 0; margin-top: 36px; font-size: 14px; line-height: 1.85; text-align: center; }
 
   @media print {
     .navbar, .alert, button, a.btn { display: none !important; }
     .pdfv { padding: 0; }
     .pdf-section { page-break-before: always; }
     .pdf-cover { page-break-after: always; min-height: auto; padding: 60px 40px; }
+    .issue-card, .solution-card, .tax-card, .conclusion-block, .strength-block { page-break-inside: avoid; }
     @page { size: A4 landscape; margin: 14mm 14mm; }
   }
 </style>
@@ -70,7 +102,7 @@
 {% block content %}
 <div class="pdfv">
 
-  {# 表紙 #}
+  {# ========== 表紙 ========== #}
   <div class="pdf-cover">
     <div class="label">経営分析レポート / MANAGEMENT REPORT</div>
     <h1>{{ client.name }}</h1>
@@ -78,236 +110,256 @@
     <div class="subtitle">{{ pdf_content.cover_subtitle or "経営状況のご報告" }}</div>
     <div class="footer">
       作成: {{ user.display_name or user.username }} 税理士事務所<br>
-      作成日: {{ fd.created_at.strftime('%Y年%m月%d日') if fd.created_at else '' }}
+      作成日: {% if fd.created_at %}{{ fd.created_at.strftime('%Y年%m月%d日') }}{% endif %}
     </div>
   </div>
 
-  {# はじめに #}
-  {% if pdf_content.narrative_intro %}
+  {# ========== 01 業績サマリー ========== #}
+  {% if pdf_content.section1_performance %}
+  {% set s1 = pdf_content.section1_performance %}
   <div class="pdf-section">
     <div class="pdf-section-title">
       <span class="bar"></span>
       <span class="num">01</span>
-      <h2>はじめに</h2>
+      <h2>業績サマリー</h2>
     </div>
-    <p class="narrative lead">{{ pdf_content.narrative_intro }}</p>
+
+    {% if s1.headline %}
+    <div class="pdf-section-headline">{{ s1.headline }}</div>
+    {% endif %}
+
+    {# 主要数字カード（PL） #}
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="label">売上高</div>
+        <div class="value">{% if fd.revenue >= 10000 %}{{ "%.2f"|format(fd.revenue/10000) }}億{% elif fd.revenue >= 1000 %}{{ "%.0f"|format(fd.revenue/1000) }}千万{% else %}{{ "{:,.0f}".format(fd.revenue or 0) }}万{% endif %}</div>
+        {% if fd.prev_revenue and fd.prev_revenue > 0 %}{% set g = (fd.revenue - fd.prev_revenue) / fd.prev_revenue * 100 %}
+        <div class="delta {% if g >= 0 %}up{% else %}down{% endif %}">前期比 {{ "%+.1f"|format(g) }}%</div>
+        {% endif %}
+      </div>
+      <div class="kpi-card">
+        <div class="label">粗利</div>
+        <div class="value">{% if fd.gross_profit >= 10000 %}{{ "%.2f"|format(fd.gross_profit/10000) }}億{% elif fd.gross_profit >= 1000 %}{{ "%.0f"|format(fd.gross_profit/1000) }}千万{% else %}{{ "{:,.0f}".format(fd.gross_profit or 0) }}万{% endif %}</div>
+        {% if fd.revenue %}<div class="delta">粗利率 {{ "%.1f"|format(fd.gross_profit / fd.revenue * 100) }}%</div>{% endif %}
+      </div>
+      <div class="kpi-card">
+        <div class="label">本業のもうけ（営業利益）</div>
+        <div class="value" style="color:{% if fd.operating_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(fd.operating_profit or 0) }}万</div>
+        {% if fd.revenue %}<div class="delta">利益率 {{ "%.1f"|format(fd.operating_profit / fd.revenue * 100) }}%</div>{% endif %}
+      </div>
+      {% if fd.ordinary_profit %}
+      <div class="kpi-card">
+        <div class="label">経常利益</div>
+        <div class="value" style="color:{% if fd.ordinary_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(fd.ordinary_profit) }}万</div>
+        <div class="delta" style="color:var(--rk-text-muted);">本業±営業外</div>
+      </div>
+      {% endif %}
+      <div class="kpi-card">
+        <div class="label">当期純利益</div>
+        <div class="value" style="color:{% if fd.net_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(fd.net_profit or 0) }}万</div>
+        <div class="delta" style="color:var(--rk-text-muted);">税引後の最終利益</div>
+      </div>
+    </div>
+
+    {# 説明テキスト #}
+    {% if s1.summary_text %}
+    <p>{{ s1.summary_text }}</p>
+    {% endif %}
+
+    {# 推移グラフ（複数期あるとき） #}
+    {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;">
+      <div style="background:#fff;border:1px solid var(--rk-border);padding:14px;border-radius:6px;">
+        <div style="font-size:12px;font-weight:700;color:var(--rk-text-muted);margin-bottom:8px;">📊 売上・本業のもうけ 推移</div>
+        <div style="height:220px;"><canvas id="pdfPL"></canvas></div>
+      </div>
+      <div style="background:#fff;border:1px solid var(--rk-border);padding:14px;border-radius:6px;">
+        <div style="font-size:12px;font-weight:700;color:var(--rk-text-muted);margin-bottom:8px;">📈 営業利益率 推移</div>
+        <div style="height:220px;"><canvas id="pdfMargin"></canvas></div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if s1.trend_comment %}
+    <p style="margin-top:14px;padding:12px 16px;background:var(--rk-bg-alt);border-left:3px solid var(--rk-black);font-size:13px;">{{ s1.trend_comment }}</p>
+    {% endif %}
   </div>
   {% endif %}
 
-  {# 現状 + 主要数字 #}
-  {% if pdf_content.narrative_situation or pdf_content.key_numbers %}
+  {# ========== 02 御社の強み ========== #}
+  {% if pdf_content.section2_strengths %}
+  {% set s2 = pdf_content.section2_strengths %}
   <div class="pdf-section">
     <div class="pdf-section-title">
       <span class="bar"></span>
       <span class="num">02</span>
-      <h2>今の会社の状況</h2>
-    </div>
-    {% if pdf_content.narrative_situation %}
-    <p class="narrative">{{ pdf_content.narrative_situation }}</p>
-    {% endif %}
-    {% if pdf_content.key_numbers %}
-    <div class="key-numbers">
-      {% for kn in pdf_content.key_numbers %}
-      <div class="key-num-card">
-        <div class="label">{{ kn.label }}</div>
-        <div class="value">{{ kn.value }}</div>
-        <div class="comment">{{ kn.comment }}</div>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {# 財務サマリー数字テーブル（社長語） #}
-    <div class="card mt-4" style="border:1px solid var(--rk-border);padding:18px 24px;">
-      <h3 style="font-size:15px;margin-bottom:14px;color:var(--rk-text-muted);font-weight:700;">📊 主要指標サマリー</h3>
-      <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead>
-          <tr style="border-bottom:2px solid var(--rk-black);">
-            <th style="text-align:left;padding:8px 4px;color:var(--rk-text-muted);font-weight:700;font-size:11px;">指標</th>
-            <th style="text-align:right;padding:8px 4px;color:var(--rk-text-muted);font-weight:700;font-size:11px;">今期</th>
-            <th style="text-align:left;padding:8px 12px;color:var(--rk-text-muted);font-weight:700;font-size:11px;">読み方</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--rk-border);">
-            <td style="padding:10px 4px;">売上高</td>
-            <td style="padding:10px 4px;text-align:right;font-weight:700;">{% if fd.revenue >= 10000 %}{{ "%.1f"|format(fd.revenue/10000) }}億円{% elif fd.revenue >= 1000 %}{{ "%.1f"|format(fd.revenue/1000) }}千万円{% else %}{{ "{:,.0f}".format(fd.revenue) }}万円{% endif %}</td>
-            <td style="padding:10px 12px;color:var(--rk-text-muted);">会社全体の年間売上</td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--rk-border);">
-            <td style="padding:10px 4px;">本業のもうけ（営業利益）</td>
-            <td style="padding:10px 4px;text-align:right;font-weight:700;color:{% if fd.operating_profit >= 0 %}#16a34a{% else %}#E60039{% endif %};">{{ "{:+,.0f}".format(fd.operating_profit) }}万円</td>
-            <td style="padding:10px 12px;color:var(--rk-text-muted);">本業だけで稼げてる利益</td>
-          </tr>
-          <tr style="border-bottom:1px solid var(--rk-border);">
-            <td style="padding:10px 4px;">手元の現金</td>
-            <td style="padding:10px 4px;text-align:right;font-weight:700;">{% if fd.cash >= 10000 %}{{ "%.1f"|format(fd.cash/10000) }}億円{% elif fd.cash >= 1000 %}{{ "%.1f"|format(fd.cash/1000) }}千万円{% else %}{{ "{:,.0f}".format(fd.cash or 0) }}万円{% endif %}</td>
-            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% if fd.revenue > 0 %}月商{{ "%.1f"|format(fd.cash / (fd.revenue/12)) }}ヶ月分の運転資金{% endif %}</td>
-          </tr>
-          {% if fd.interest_bearing_debt %}
-          <tr style="border-bottom:1px solid var(--rk-border);">
-            <td style="padding:10px 4px;">借入の残り</td>
-            <td style="padding:10px 4px;text-align:right;font-weight:700;color:#E60039;">{% if fd.interest_bearing_debt >= 10000 %}{{ "%.1f"|format(fd.interest_bearing_debt/10000) }}億円{% elif fd.interest_bearing_debt >= 1000 %}{{ "%.1f"|format(fd.interest_bearing_debt/1000) }}千万円{% else %}{{ "{:,.0f}".format(fd.interest_bearing_debt) }}万円{% endif %}</td>
-            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% if cash_burn and cash_burn.debt_repayment_monthly_est %}月{{ "%.0f"|format(cash_burn.debt_repayment_monthly_est) }}万円ペースで返済中{% endif %}</td>
-          </tr>
-          {% endif %}
-          {% if fd.equity and fd.total_assets %}
-          <tr style="border-bottom:1px solid var(--rk-border);">
-            <td style="padding:10px 4px;">自分のお金で経営してる割合（自己資本比率）</td>
-            <td style="padding:10px 4px;text-align:right;font-weight:700;">{{ "%.1f"|format(fd.equity / fd.total_assets * 100) }}%</td>
-            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% set er = fd.equity / fd.total_assets * 100 %}{% if er >= 30 %}健全水準{% elif er >= 10 %}標準範囲{% else %}低めの水準{% endif %}（30%以上で健全）</td>
-          </tr>
-          {% endif %}
-          {% if cash_wc and cash_wc.receivables_days %}
-          <tr style="border-bottom:1px solid var(--rk-border);">
-            <td style="padding:10px 4px;">売掛金が現金になるまでの日数</td>
-            <td style="padding:10px 4px;text-align:right;font-weight:700;">{{ cash_wc.receivables_days }}日</td>
-            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% if cash_wc.receivables_days <= 45 %}短くて健全{% elif cash_wc.receivables_days <= 60 %}標準{% else %}長めで回収遅延の可能性{% endif %}</td>
-          </tr>
-          {% endif %}
-        </tbody>
-      </table>
+      <h2>御社の強み</h2>
     </div>
 
-    {# 推移グラフ（過去複数期がある場合だけ） #}
-    {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
-    <div class="row g-3 mt-4">
-      <div class="col-6">
-        <div class="card" style="border:1px solid var(--rk-border);padding:18px;">
-          <h3 style="font-size:14px;margin-bottom:12px;color:var(--rk-text-muted);font-weight:700;">📈 売上・本業のもうけ 推移</h3>
-          <div style="height:240px;"><canvas id="pdfPL"></canvas></div>
-        </div>
-      </div>
-      <div class="col-6">
-        <div class="card" style="border:1px solid var(--rk-border);padding:18px;">
-          <h3 style="font-size:14px;margin-bottom:12px;color:var(--rk-text-muted);font-weight:700;">💰 手元の現金 推移</h3>
-          <div style="height:240px;"><canvas id="pdfCash"></canvas></div>
-        </div>
-      </div>
-    </div>
+    {% if s2.headline %}
+    <div class="pdf-section-headline">{{ s2.headline }}</div>
     {% endif %}
+
+    {% for s in (s2.strengths_list or []) %}
+    <div class="strength-block">
+      <div class="title">{{ s.title }}</div>
+      <div class="evidence">{{ s.evidence }}</div>
+      {% if s.implication %}<div class="implication">{{ s.implication }}</div>{% endif %}
+    </div>
+    {% endfor %}
   </div>
   {% endif %}
 
-  {# 強み #}
-  {% if pdf_content.narrative_strengths %}
+  {# ========== 03 取り組むべき課題 ========== #}
+  {% if pdf_content.section3_issues %}
+  {% set s3 = pdf_content.section3_issues %}
   <div class="pdf-section">
     <div class="pdf-section-title">
       <span class="bar"></span>
       <span class="num">03</span>
-      <h2>御社の強み</h2>
+      <h2>取り組むべき課題</h2>
     </div>
-    <div class="pdf-block strengths">
-      <p class="narrative">{{ pdf_content.narrative_strengths }}</p>
-    </div>
-  </div>
-  {% endif %}
 
-  {# 課題 #}
-  {% if pdf_content.narrative_issues %}
-  <div class="pdf-section">
-    <div class="pdf-section-title">
-      <span class="bar"></span>
-      <span class="num">04</span>
-      <h2>今、向き合うべきこと</h2>
-    </div>
-    <div class="pdf-block issues">
-      <p class="narrative">{{ pdf_content.narrative_issues }}</p>
-    </div>
-  </div>
-  {% endif %}
-
-  {# 提案 #}
-  {% if pdf_content.narrative_proposal or result.prioritized_problems %}
-  <div class="pdf-section">
-    <div class="pdf-section-title">
-      <span class="bar"></span>
-      <span class="num">05</span>
-      <h2>これからのご提案</h2>
-    </div>
-    {% if pdf_content.narrative_proposal %}
-    <div class="pdf-block proposal">
-      <p class="narrative">{{ pdf_content.narrative_proposal }}</p>
-    </div>
+    {% if s3.headline %}
+    <div class="pdf-section-headline">{{ s3.headline }}</div>
     {% endif %}
 
-    {# 採用済み（dismissed除外済み）の課題→ソリューション一覧 #}
-    {% if result.prioritized_problems %}
-    <div class="mt-4">
-      {% for p in result.prioritized_problems %}
-      {% if p.solutions %}
-      <div class="card mb-3" style="border:1px solid var(--rk-border);border-left:4px solid {% if p.severity == '高' %}var(--rk-accent){% elif p.severity == '中' %}#6B7280{% else %}#9CA3AF{% endif %};padding:18px 22px;">
-        <div style="font-size:11px;color:var(--rk-text-muted);font-weight:700;letter-spacing:.05em;margin-bottom:4px;">課題 #{{ p.rank }} ／ 重要度 {{ p.severity }}</div>
-        <h3 style="font-size:16px;margin-bottom:14px;">{{ p.title }}</h3>
-        <table style="width:100%;font-size:12px;border-collapse:collapse;">
-          <thead>
-            <tr style="border-bottom:1px solid var(--rk-border);">
-              <th style="text-align:left;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:40%;">打ち手</th>
-              <th style="text-align:center;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:14%;">期待効果（年）</th>
-              <th style="text-align:center;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:10%;">期間</th>
-              <th style="text-align:center;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:8%;">難易度</th>
-              <th style="text-align:left;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:28%;">最初の一歩</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for sol in p.solutions %}
-            <tr style="border-bottom:1px solid var(--rk-border);">
-              <td style="padding:8px 4px;font-weight:600;">{{ sol.title }}</td>
-              <td style="padding:8px 4px;text-align:center;color:#16a34a;font-weight:700;">+{{ "{:,.0f}".format(sol.impact_min or 0) }}〜{{ "{:,.0f}".format(sol.impact_max or 0) }}万</td>
-              <td style="padding:8px 4px;text-align:center;font-size:11px;">{{ sol.timeframe or '—' }}</td>
-              <td style="padding:8px 4px;text-align:center;font-size:11px;">{{ sol.difficulty or '—' }}</td>
-              <td style="padding:8px 4px;font-size:11px;color:var(--rk-text-muted);">{{ sol.first_step or '' }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% if p.expected_outcome %}
-        <div style="background:#F7F7F9;border-left:3px solid #16a34a;padding:10px 14px;margin-top:12px;font-size:12px;line-height:1.7;">
-          <strong style="color:#16a34a;">🎯 予想効果:</strong> {{ p.expected_outcome }}
-        </div>
-        {% endif %}
+    {% for issue in (s3.issues or []) %}
+    <div class="issue-card">
+      <div>
+        <span class="rank">課題 #{{ issue.rank }}</span>
+        <span class="title">{{ issue.title }}</span>
       </div>
-      {% endif %}
-      {% endfor %}
+      <div class="row3">
+        <div class="col">
+          <div class="col-label">📊 事実</div>
+          <div class="col-text">{{ issue.fact }}</div>
+        </div>
+        <div class="col">
+          <div class="col-label">🔗 因果・影響</div>
+          <div class="col-text">{{ issue.causal }}</div>
+        </div>
+        <div class="col">
+          <div class="col-label">💡 示唆</div>
+          <div class="col-text">{{ issue.implication }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    {# 現預金推移グラフ（課題③に該当する場合の補強） #}
+    {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+    <div style="background:#fff;border:1px solid var(--rk-border);padding:14px;border-radius:6px;margin-top:18px;">
+      <div style="font-size:12px;font-weight:700;color:var(--rk-text-muted);margin-bottom:8px;">💰 手元の現金 推移（過去）</div>
+      <div style="height:200px;"><canvas id="pdfCash"></canvas></div>
     </div>
     {% endif %}
   </div>
   {% endif %}
 
-  {# 次の一歩 #}
-  {% if pdf_content.next_actions %}
+  {# ========== 04+ 各課題への提案 ========== #}
+  {% for prop in (pdf_content.section4_proposals_per_issue or []) %}
   <div class="pdf-section">
     <div class="pdf-section-title">
       <span class="bar"></span>
-      <span class="num">06</span>
-      <h2>次の一歩</h2>
+      <span class="num">{{ "%02d"|format(3 + loop.index) }}</span>
+      <h2>課題 #{{ prop.issue_rank }} への提案</h2>
     </div>
-    <ul class="next-actions">
-      {% for action in pdf_content.next_actions %}
-      <li>{{ action }}</li>
+
+    <div class="proposal-issue-header">
+      <div class="label">対応する課題</div>
+      <div class="title">{{ prop.issue_title }}</div>
+    </div>
+    {% if prop.intro %}
+    <div class="proposal-issue-intro">{{ prop.intro }}</div>
+    {% endif %}
+
+    <div class="solution-grid">
+      {% for sol in (prop.solutions or []) %}
+      <div class="solution-card">
+        <div class="title">{{ sol.title }}</div>
+        <div class="meta-row">
+          <div class="meta-cell">
+            <div class="meta-label">💰 期待効果</div>
+            <div class="meta-value effect">{{ sol.expected_effect }}</div>
+          </div>
+          <div class="meta-cell">
+            <div class="meta-label">💸 実行費用</div>
+            <div class="meta-value">{{ sol.cost }}</div>
+          </div>
+          <div class="meta-cell">
+            <div class="meta-label">⏱ 期間</div>
+            <div class="meta-value">{{ sol.timeframe }}</div>
+          </div>
+        </div>
+        {% if sol.why %}<div class="why"><strong>なぜ効くか:</strong> {{ sol.why }}</div>{% endif %}
+        {% if sol.first_step %}<div class="first-step"><strong>明日の一歩:</strong> {{ sol.first_step }}</div>{% endif %}
+      </div>
       {% endfor %}
-    </ul>
+    </div>
   </div>
-  {% endif %}
+  {% endfor %}
 
-  {# 未来像 #}
-  {% if pdf_content.narrative_outlook %}
+  {# ========== 07 その他の提案（節税） ========== #}
+  {% if pdf_content.section5_tax_proposals and pdf_content.section5_tax_proposals.applicable and pdf_content.section5_tax_proposals.proposals %}
+  {% set s5 = pdf_content.section5_tax_proposals %}
+  {% set tax_num = 4 + ((pdf_content.section4_proposals_per_issue or [])|length) %}
   <div class="pdf-section">
     <div class="pdf-section-title">
       <span class="bar"></span>
-      <span class="num">07</span>
-      <h2>これからの3年・5年</h2>
+      <span class="num">{{ "%02d"|format(tax_num) }}</span>
+      <h2>その他のご提案（節税×投資判断）</h2>
     </div>
-    <div class="pdf-block outlook">
-      <p class="narrative">{{ pdf_content.narrative_outlook }}</p>
+
+    {% if s5.headline %}
+    <div class="pdf-section-headline">{{ s5.headline }}</div>
+    {% endif %}
+
+    {% for tp in s5.proposals %}
+    <div class="tax-card">
+      <div class="title">{{ tp.title }}</div>
+      <div class="row3">
+        <div><span class="label">節税効果:</span> <span class="value" style="color:#16a34a;">{{ tp.tax_save }}</span></div>
+        <div><span class="label">必要支出:</span> <span class="value">{{ tp.cost }}</span></div>
+        <div><span class="label">注記:</span> <span style="color:var(--rk-text-muted);">{{ tp.note }}</span></div>
+      </div>
     </div>
+    {% endfor %}
   </div>
   {% endif %}
 
-  {# 締め #}
-  {% if pdf_content.closing %}
-  <div class="pdf-closing">
-    {{ pdf_content.closing }}
+  {# ========== 最終 まとめ ========== #}
+  {% if pdf_content.section6_conclusion %}
+  {% set s6 = pdf_content.section6_conclusion %}
+  {% set conc_num = 4 + ((pdf_content.section4_proposals_per_issue or [])|length) + (1 if (pdf_content.section5_tax_proposals and pdf_content.section5_tax_proposals.applicable and pdf_content.section5_tax_proposals.proposals) else 0) %}
+  <div class="pdf-section">
+    <div class="pdf-section-title">
+      <span class="bar"></span>
+      <span class="num">{{ "%02d"|format(conc_num) }}</span>
+      <h2>まとめ</h2>
+    </div>
+
+    {% if s6.headline %}
+    <div class="pdf-section-headline">{{ s6.headline }}</div>
+    {% endif %}
+
+    {% if s6.positive_summary %}
+    <div class="conclusion-block positive">
+      <div class="label">✅ 評価できる点</div>
+      <div class="text">{{ s6.positive_summary }}</div>
+    </div>
+    {% endif %}
+
+    {% if s6.next_steps_summary %}
+    <div class="conclusion-block next">
+      <div class="label">🎯 次のステップで見える未来</div>
+      <div class="text">{{ s6.next_steps_summary }}</div>
+    </div>
+    {% endif %}
+
+    {% if s6.closing_message %}
+    <div class="pdf-closing">{{ s6.closing_message }}</div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -323,7 +375,11 @@
   const op = {{ (result.trend_metrics.operating_profit or [])|tojson }};
   const cash = {{ (result.trend_metrics.cash or [])|tojson }};
 
-  // PL推移（売上+営業利益）
+  // 営業利益率 = op / rev * 100
+  const margin = rev.map((r, i) => r > 0 ? (op[i] || 0) / r * 100 : 0);
+
+  function yFmt(v) { return v >= 10000 ? (v/10000).toFixed(1) + '億' : v.toLocaleString() + '万'; }
+
   const plEl = document.getElementById('pdfPL');
   if (plEl && window.Chart) {
     new Chart(plEl, {
@@ -340,17 +396,40 @@
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
         scales: {
-          y: { ticks: { callback: v => (v >= 10000 ? (v/10000).toFixed(1) + '億' : v.toLocaleString() + '万'), font: { size: 10 } }},
+          y: { ticks: { callback: yFmt, font: { size: 10 } }},
           x: { ticks: { font: { size: 10 } } }
         }
       }
     });
   }
 
-  // 現預金推移
-  const cashEl = document.getElementById('pdfCash');
-  if (cashEl && window.Chart) {
-    new Chart(cashEl, {
+  const mEl = document.getElementById('pdfMargin');
+  if (mEl && window.Chart) {
+    new Chart(mEl, {
+      type: 'line',
+      data: {
+        labels: periods,
+        datasets: [{
+          label: '営業利益率(%)', data: margin,
+          borderColor: '#0F0F19', backgroundColor: 'rgba(15,15,25,0.1)',
+          borderWidth: 3, pointRadius: 6, pointBackgroundColor: '#0F0F19',
+          fill: true, tension: 0.2,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { ticks: { callback: v => v.toFixed(1) + '%', font: { size: 10 } }},
+          x: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  const cEl = document.getElementById('pdfCash');
+  if (cEl && window.Chart) {
+    new Chart(cEl, {
       type: 'line',
       data: {
         labels: periods,
@@ -365,7 +444,7 @@
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          y: { ticks: { callback: v => (v >= 10000 ? (v/10000).toFixed(1) + '億' : v.toLocaleString() + '万'), font: { size: 10 } }},
+          y: { ticks: { callback: yFmt, font: { size: 10 } }},
           x: { ticks: { font: { size: 10 } } }
         }
       }
