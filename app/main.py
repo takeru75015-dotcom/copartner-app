@@ -923,6 +923,62 @@ async def save_hearing_and_reanalyze(client_id: int, request: Request, db: Sessi
     return RedirectResponse(f"/clients/{client_id}", status_code=302)
 
 
+@app.get("/financials/{fd_id}/pdf-view", response_class=HTMLResponse)
+def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
+    """PDF用の社長プレゼン版ビュー（Playwright経由で読み込まれる）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return RedirectResponse("/dashboard", status_code=302)
+    cl = db.query(Client).filter(Client.id == fd.client_id).first()
+
+    existing = db.query(Analysis).filter(
+        Analysis.financial_data_id == fd_id
+    ).order_by(Analysis.created_at.desc()).first()
+    if not existing:
+        return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+
+    result = json.loads(existing.result_json)
+    pdf_content = result.get("owner_pdf_content")
+
+    # キャッシュなければ生成して保存（トークン消費は1回だけ）
+    if not pdf_content:
+        try:
+            from .claude_client import generate_owner_pdf_content
+            pdf_content = generate_owner_pdf_content(result, fd, cl.name, fd.period)
+            result["owner_pdf_content"] = pdf_content
+            existing.result_json = json.dumps(result, ensure_ascii=False)
+            db.commit()
+        except Exception as e:
+            # 生成失敗時は既存の owner_message を fallback として最低限の dict を作る
+            print(f"[pdf_view] narrative generation failed: {e}")
+            pdf_content = {
+                "cover_subtitle": "経営分析レポート",
+                "narrative_intro": result.get("owner_message", "") or result.get("summary", ""),
+                "narrative_situation": result.get("summary", ""),
+                "narrative_issues": "",
+                "narrative_proposal": result.get("owner_what_to_do", ""),
+                "narrative_outlook": "",
+                "narrative_strengths": "",
+                "key_numbers": [],
+                "next_actions": [],
+                "closing": "",
+            }
+
+    return templates.TemplateResponse("pdf_view.html", {
+        "request": request,
+        "client": cl,
+        "fd": fd,
+        "pdf_content": pdf_content,
+        "result": result,
+        "user": user,
+    })
+
+
 @app.get("/financials/{fd_id}/pdf")
 def export_pdf(fd_id: int, request: Request, db: Session = Depends(get_db)):
     """分析画面をPDF化してダウンロード"""

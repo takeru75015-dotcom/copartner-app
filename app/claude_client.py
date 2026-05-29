@@ -348,6 +348,97 @@ def extract_business_context_from_pdf(pdf_bytes: bytes, filename: str) -> str:
     return message.content[0].text.strip()
 
 
+def generate_owner_pdf_content(result: dict, fd, client_name: str, period: str) -> dict:
+    """
+    分析結果を「社長プレゼン用」のナラティブに再翻訳。
+    既存の result（prioritized_problems, owner_message 等）をベースに、
+    ストーリー仕立て・易しい言葉で再生成する。
+    トークン消費は約5-8k input + 2-3k output。
+    """
+    import json as _json
+    # 入力を最小限に絞る（トークン節約）
+    distilled = {
+        "company": client_name,
+        "period": period,
+        "industry": result.get("benchmark", {}).get("industry_name", ""),
+        "key_insight": result.get("key_insight", ""),
+        "owner_message": result.get("owner_message", ""),
+        "owner_what_to_do": result.get("owner_what_to_do", ""),
+        "summary": result.get("summary", ""),
+        "strengths": (result.get("strengths") or [])[:3],
+        "issues": (result.get("issues") or [])[:3],
+        "prioritized_problems": [],
+        "competitive_strengths": [],
+    }
+    for p in (result.get("prioritized_problems") or [])[:3]:
+        distilled["prioritized_problems"].append({
+            "rank": p.get("rank"),
+            "title": p.get("title"),
+            "detail": p.get("detail"),
+            "solutions_titles": [s.get("title") for s in (p.get("solutions") or [])[:3]],
+            "expected_outcome": p.get("expected_outcome"),
+        })
+    for cs in (result.get("competitive_strengths") or [])[:3]:
+        distilled["competitive_strengths"].append({
+            "title": cs.get("title"),
+            "narrative": cs.get("narrative"),
+        })
+
+    # 主要数字
+    distilled["numbers"] = {
+        "revenue": getattr(fd, "revenue", 0),
+        "operating_profit": getattr(fd, "operating_profit", 0),
+        "net_profit": getattr(fd, "net_profit", 0),
+        "cash": getattr(fd, "cash", 0),
+        "equity_ratio": (getattr(fd, "equity", 0) / getattr(fd, "total_assets", 1) * 100) if getattr(fd, "total_assets", 0) else None,
+        "interest_bearing_debt": getattr(fd, "interest_bearing_debt", 0),
+    }
+
+    prompt = f"""あなたは中小企業の社長に経営報告書をプレゼンする税理士です。
+以下の分析結果を、**社長が手を止めて聞き入る、易しいストーリー仕立て**のレポートに書き直してください。
+
+【分析結果（要約済み）】
+{_json.dumps(distilled, ensure_ascii=False, indent=2)}
+
+【書き直しの絶対ルール】
+1. **専門用語禁止**: 営業利益→「本業のもうけ」、有利子負債→「借入の残り」、CCC→「現金が戻るサイクル」、EBITDA→「本業の現金生成力」、流動比率→「短期の支払い余力」
+2. **数字は丸めて1〜2桁**: 26,288万円→「2.6億円」、6,569万円→「6,600万円」or「約6千万円」
+3. **不安煽り禁止**: 「危険」「破綻」「底をつく」→ 「気になる」「少し心配」「余裕が薄い」
+4. **問いかけ・伴走スタンス**: 「〜してください」連発NG。「〜はどこまで伸ばせそうですか？」「〜という選択肢があります」
+5. **ストーリー優先**: 単なる箇条書きでなく、「今こうなっていて、だからこうしたい」の流れ
+6. **会社の良い点も必ず入れる**: 強み→課題→打ち手→未来像 の順
+7. **論理整合**: 「いであ77%依存」と言いつつ「いであから追加受注」のような矛盾禁止
+
+【出力JSON】
+{{
+  "cover_subtitle": "<表紙サブタイトル30字以内。会社の状況を一言で。例：『黒字化を実現、次は現金体質の強化へ』>",
+  "narrative_intro": "<2-3文 / 200-300字。挨拶＋会社の良い点・今期のハイライト>",
+  "narrative_situation": "<3-5文 / 400-600字。今の財務状況を物語風に。良い点・気になる点を順に。専門用語抜き>",
+  "key_numbers": [
+    {{"label": "<指標名（社長語）>", "value": "<丸めた数字>", "comment": "<1文の含意>"}}
+  ],
+  "narrative_strengths": "<2-3文 / 200-300字。同業比較で誇れる点をストーリーで>",
+  "narrative_issues": "<3-5文 / 400-600字。3つの課題を「だから何」「何が起きてる」の文脈で。順序立てて>",
+  "narrative_proposal": "<3-5文 / 400-600字。打ち手をストーリーで。「これをやると会社がどう変わるか」を含めて>",
+  "narrative_outlook": "<2-3文 / 200-300字。未来像。3年後・5年後にどんな会社になれるかを呼びかけ調で>",
+  "next_actions": ["<1文の具体アクション5個以内。社長が「やってみるか」と思える表現>"],
+  "closing": "<2-3文 / 150-250字。締めの挨拶。「一緒に進めていきましょう」のニュアンスで>"
+}}
+
+件数目安: key_numbers 3-5個、next_actions 3-5個。
+JSON以外は出力しない。マークダウンのコードブロックも不要。"""
+
+    client = _get_claude()
+    message = _call_claude_with_retry(
+        client,
+        model=CLAUDE_MODEL,
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = message.content[0].text.strip()
+    return _parse_json_response(text)
+
+
 def _call_claude_with_retry(client, **kwargs):
     """Claude API 呼び出し（rate_limit 時の自動リトライ付き）
     token/分のレート制限対策のため、最低60秒待機する設計"""
