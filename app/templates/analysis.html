@@ -196,9 +196,9 @@
 </div>
 
 {% if error %}
-<div class="alert alert-danger">
-  <i class="fas fa-exclamation-triangle me-2"></i>分析中にエラーが発生しました。<br>
-  <small class="d-block mt-1">{{ error }}</small>
+<div class="alert alert-danger" style="white-space: pre-wrap;">
+  <i class="fas fa-exclamation-triangle me-2"></i>分析中にエラーが発生しました。
+{{ error }}
 </div>
 
 {% elif result %}

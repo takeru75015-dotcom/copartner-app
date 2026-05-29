@@ -861,11 +861,18 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "analysis_id": analysis.id, "cached": False
         })
     except Exception as e:
+        err_str = str(e)
+        if '429' in err_str or 'rate_limit' in err_str:
+            friendly_err = "⏱ AIのレート制限に達しました（複数のリトライ後も解消せず）。\n5〜10分待ってから「再分析」ボタンを押してください。\n\n※ 大きな決算書や連続実行で発生しやすい問題です。"
+        elif 'overloaded' in err_str.lower():
+            friendly_err = "🔥 AIサーバが混雑中です。5分ほど待ってから再分析してください。"
+        else:
+            friendly_err = err_str
         return templates.TemplateResponse("analysis.html", {
             "request": request, "user": user, "client": cl, "fd": fd, "result": None,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
-            "error": str(e), "cached": False, "analysis_id": None
+            "error": friendly_err, "cached": False, "analysis_id": None
         })
 
 async def _save_hearing_form(client_id: int, request: Request, db: Session):

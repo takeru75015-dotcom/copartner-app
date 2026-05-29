@@ -349,20 +349,20 @@ def extract_business_context_from_pdf(pdf_bytes: bytes, filename: str) -> str:
 
 
 def _call_claude_with_retry(client, **kwargs):
-    """Claude API 呼び出し（rate_limit 時の自動リトライ付き）"""
+    """Claude API 呼び出し（rate_limit 時の自動リトライ付き）
+    token/分のレート制限対策のため、最低60秒待機する設計"""
     import time
-    max_retries = 4
+    max_retries = 5
     for attempt in range(max_retries):
         try:
             return client.messages.create(**kwargs)
         except Exception as e:
             err_str = str(e)
-            # 429 / overloaded_error / rate_limit_error
             is_rate = ('429' in err_str or 'rate_limit' in err_str or
                        'overloaded' in err_str.lower())
             if is_rate and attempt < max_retries - 1:
-                # サーバから retry-after があれば利用、無ければ指数バックオフ
-                retry_after = 30  # デフォルト30秒
+                # サーバから retry-after があれば優先利用
+                retry_after = None
                 try:
                     if hasattr(e, 'response') and e.response is not None:
                         ra = e.response.headers.get('retry-after')
@@ -370,7 +370,10 @@ def _call_claude_with_retry(client, **kwargs):
                             retry_after = int(ra)
                 except Exception:
                     pass
-                wait = min(retry_after, 5 * (2 ** attempt))  # 最大80秒
+                # token/分 制限は1分待たないと回復しないので最低65秒
+                # サーバ指定があればそれ、無ければ65 + 段階的増加
+                wait = retry_after if retry_after else (65 + 15 * attempt)
+                wait = min(wait, 180)  # 上限3分
                 print(f"[claude_client] rate limit hit, retry {attempt+1}/{max_retries} after {wait}s")
                 time.sleep(wait)
                 continue
