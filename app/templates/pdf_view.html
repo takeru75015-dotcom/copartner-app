@@ -166,16 +166,16 @@
     <p>{{ s1.summary_text }}</p>
     {% endif %}
 
-    {# 推移グラフ（複数期あるとき） #}
+    {# 推移グラフ（複数期あるとき）— 縦スタック #}
     {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;">
-      <div style="background:#fff;border:1px solid var(--rk-border);padding:14px;border-radius:6px;">
-        <div style="font-size:12px;font-weight:700;color:var(--rk-text-muted);margin-bottom:8px;">📊 売上・本業のもうけ 推移</div>
-        <div style="height:220px;"><canvas id="pdfPL"></canvas></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">
+      <div style="background:#fff;border:1px solid var(--rk-border);padding:10px;border-radius:6px;page-break-inside:avoid;">
+        <div style="font-size:11px;font-weight:700;color:var(--rk-text-muted);margin-bottom:6px;">📊 売上・本業のもうけ 推移</div>
+        <div style="height:170px;"><canvas id="pdfPL"></canvas></div>
       </div>
-      <div style="background:#fff;border:1px solid var(--rk-border);padding:14px;border-radius:6px;">
-        <div style="font-size:12px;font-weight:700;color:var(--rk-text-muted);margin-bottom:8px;">📈 営業利益率 推移</div>
-        <div style="height:220px;"><canvas id="pdfMargin"></canvas></div>
+      <div style="background:#fff;border:1px solid var(--rk-border);padding:10px;border-radius:6px;page-break-inside:avoid;">
+        <div style="font-size:11px;font-weight:700;color:var(--rk-text-muted);margin-bottom:6px;">📈 営業利益率 推移</div>
+        <div style="height:170px;"><canvas id="pdfMargin"></canvas></div>
       </div>
     </div>
     {% endif %}
@@ -249,9 +249,9 @@
 
     {# 現預金推移グラフ（課題③に該当する場合の補強） #}
     {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
-    <div style="background:#fff;border:1px solid var(--rk-border);padding:14px;border-radius:6px;margin-top:18px;">
-      <div style="font-size:12px;font-weight:700;color:var(--rk-text-muted);margin-bottom:8px;">💰 手元の現金 推移（過去）</div>
-      <div style="height:200px;"><canvas id="pdfCash"></canvas></div>
+    <div style="background:#fff;border:1px solid var(--rk-border);padding:10px;border-radius:6px;margin-top:14px;page-break-inside:avoid;">
+      <div style="font-size:11px;font-weight:700;color:var(--rk-text-muted);margin-bottom:6px;">💰 手元の現金 推移（過去）</div>
+      <div style="height:170px;"><canvas id="pdfCash"></canvas></div>
     </div>
     {% endif %}
   </div>
