@@ -788,6 +788,17 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
     existing = db.query(Analysis).filter(Analysis.financial_data_id == fd_id).order_by(Analysis.created_at.desc()).first()
     if existing:
         result = json.loads(existing.result_json)
+        # キャッシュされた古い分析データに新フィールドが無い場合、historical_data から補完
+        tm = result.get("trend_metrics") or {}
+        if tm.get("periods"):
+            # 各期に対応する FinancialData を期で引き直す
+            period_to_fd = {h.period: h for h in _all_fds_for_cf}
+            sorted_periods = tm["periods"]
+            for key in ["cost_of_sales", "gross_profit", "selling_expenses", "total_assets",
+                        "equity", "interest_bearing_debt", "total_liabilities", "current_liabilities"]:
+                if key not in tm or not tm.get(key):
+                    tm[key] = [(getattr(period_to_fd.get(p), key, 0) or 0) if period_to_fd.get(p) else 0 for p in sorted_periods]
+            result["trend_metrics"] = tm
         return templates.TemplateResponse("analysis.html", {
             "request": request, "user": user, "client": cl, "fd": fd, "result": result,
             "breakdown": breakdown,
@@ -897,6 +908,44 @@ async def save_hearing_and_reanalyze(client_id: int, request: Request, db: Sessi
         db.commit()
         return RedirectResponse(f"/financials/{fd.id}/analyze", status_code=302)
     return RedirectResponse(f"/clients/{client_id}", status_code=302)
+
+
+@app.get("/financials/{fd_id}/pdf")
+def export_pdf(fd_id: int, request: Request, db: Session = Depends(get_db)):
+    """分析画面をPDF化してダウンロード"""
+    from fastapi.responses import Response
+    from .services.pdf_export import generate_pdf_for_fd
+
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+
+    # 所有者検証
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return RedirectResponse("/dashboard", status_code=302)
+    cl = db.query(Client).filter(Client.id == fd.client_id).first()
+
+    # 自分のセッション cookie を取得
+    session_value = request.cookies.get("session", "")
+    if not session_value:
+        return RedirectResponse(f"/financials/{fd_id}/analyze?err=session", status_code=302)
+
+    # PDF生成（Playwright）
+    pdf_bytes = generate_pdf_for_fd(fd_id, session_value, base_url="http://127.0.0.1:8000")
+    if not pdf_bytes:
+        return RedirectResponse(f"/financials/{fd_id}/analyze?err=pdf", status_code=302)
+
+    filename = f"{cl.name}_{fd.period}_分析レポート.pdf".replace("/", "_")
+    # RFC 5987: filename* で UTF-8 URL エンコード版を提供
+    filename_encoded = quote(filename, safe="")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=report.pdf; filename*=UTF-8''{filename_encoded}"},
+    )
 
 
 @app.api_route("/financials/{fd_id}/reanalyze", methods=["GET", "POST"])

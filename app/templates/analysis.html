@@ -178,6 +178,9 @@
     <button type="submit" class="btn btn-outline-warning btn-sm"><i class="fas fa-redo me-1"></i>再分析</button>
   </form>
   {% endif %}
+  <a href="/financials/{{ fd.id }}/pdf" class="btn btn-sm" style="background:var(--rk-black);color:#fff;" id="pdfBtn" onclick="this.innerHTML='<i class=&quot;fas fa-spinner fa-spin me-1&quot;></i>生成中…(30秒〜2分)'; this.style.pointerEvents='none';">
+    <i class="fas fa-file-pdf me-1"></i>PDF出力
+  </a>
   <div class="mode-switch ms-auto" id="modeSwitch">
     <button data-mode="simple" class="active">👤 社長向け</button>
     <button data-mode="pro">🧑‍💼 プロ向け</button>
