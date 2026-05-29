@@ -106,9 +106,11 @@ if (!FD_ID || !SESSION || !OUTPUT) {
         tr { page-break-inside: avoid; break-inside: avoid; }
         /* widow/orphan制御（最低3行は同じページに） */
         p, div { orphans: 3; widows: 3; }
-        /* タブ間は強制改ページ（セクション切れ目を明確に） */
-        .cp-tab-panel { page-break-before: always; break-before: page; }
-        .cp-tab-panel:first-of-type { page-break-before: avoid; break-before: avoid; }
+        /* タブ間は自然な改行（余白防止）。タブ境界は線で示す */
+        .cp-tab-panel { padding-top: 16px !important; }
+        .cp-tab-panel + .cp-tab-panel { border-top: 3px solid #0F0F19 !important; margin-top: 20px !important; padding-top: 20px !important; }
+        /* シミュレータータブは PDF でも完全非表示（残骸対策） */
+        #panel-simulator { display: none !important; }
         /* データ制限警告（data-limit）を横並びに圧縮 */
         .data-limit { display: inline-block !important; margin: 4px 8px 4px 0 !important; padding: 6px 10px !important; font-size: 9px !important; }
         /* details panel タイトルの間隔詰める */
