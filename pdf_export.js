@@ -70,17 +70,22 @@ if (!FD_ID || !SESSION || !OUTPUT) {
         details summary::-webkit-details-marker { display: none !important; }
         details > summary { padding: 8px 12px !important; }
         details > div { padding: 12px !important; }
-        /* 文字組み版 */
-        body { line-height: 1.5; font-size: 11px; }
-        h1 { font-size: 18px; } h2 { font-size: 16px; }
-        h3 { font-size: 14px; } h4 { font-size: 13px; }
-        h5 { font-size: 12px; } h6 { font-size: 11px; }
-        .metric-card .metric-value { font-size: 16px !important; }
-        .metric-card .metric-label { font-size: 9px !important; }
-        .metric-card .metric-sub { font-size: 8px !important; }
-        .metric-card { padding: 8px 10px !important; }
-        .rk-hero { padding: 16px 18px !important; margin-bottom: 12px !important; }
-        .rk-section-title { font-size: 13px !important; margin: 14px 0 8px !important; padding-bottom: 6px !important; }
+        /* 文字組み版（PDF用にやや大きめ） */
+        body { line-height: 1.55; font-size: 13px; }
+        h1 { font-size: 22px; } h2 { font-size: 19px; }
+        h3 { font-size: 17px; } h4 { font-size: 15px; }
+        h5 { font-size: 14px; } h6 { font-size: 13px; }
+        .small { font-size: 11px !important; }
+        .metric-card .metric-value { font-size: 19px !important; }
+        .metric-card .metric-label { font-size: 11px !important; }
+        .metric-card .metric-sub { font-size: 10px !important; }
+        .metric-card { padding: 10px 12px !important; }
+        .rk-hero { padding: 18px 22px !important; margin-bottom: 14px !important; }
+        .rk-hero .rk-big-num, .rk-hero div[style*="font-size:1.4rem"] { font-size: 16px !important; }
+        .rk-hero div[style*="font-size:1.1rem"], .rk-hero div[style*="font-size:1.05rem"] { font-size: 13px !important; }
+        .rk-section-title { font-size: 15px !important; margin: 16px 0 10px !important; padding-bottom: 8px !important; }
+        table.table-sm td, table.table-sm th { font-size: 11px !important; padding: 4px 6px !important; }
+        .badge { font-size: 10px !important; }
         /* カードの余白詰める */
         .card { padding: 10px !important; margin-bottom: 8px !important; }
         .row.g-3 { gap: 8px 0 !important; }
@@ -91,8 +96,16 @@ if (!FD_ID || !SESSION || !OUTPUT) {
         /* カードは無理に1ページに収めない（余白防止） */
         .card { page-break-inside: auto; break-inside: auto; }
         details { page-break-inside: auto; break-inside: auto; }
+        /* details summary は次のコンテンツと一緒に */
+        details > summary { page-break-after: avoid; break-after: avoid; }
+        /* ソリューションカード単体は分断防止（小さいので） */
+        details .card { page-break-inside: avoid; break-inside: avoid; }
+        /* 予想効果ボックスも分断防止 */
+        details > div > div:last-child { page-break-inside: avoid; break-inside: avoid; }
         /* テーブル行は分断防止 */
         tr { page-break-inside: avoid; break-inside: avoid; }
+        /* widow/orphan制御（最低3行は同じページに） */
+        p, div { orphans: 3; widows: 3; }
         /* タブ間は強制改ページ（セクション切れ目を明確に） */
         .cp-tab-panel { page-break-before: always; break-before: page; }
         .cp-tab-panel:first-of-type { page-break-before: avoid; break-before: avoid; }
