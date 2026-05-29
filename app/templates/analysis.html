@@ -23,8 +23,9 @@
   .mode-switch { display: flex; gap: 4px; background: #f3f4f6; padding: 4px; border-radius: 99px; margin-left: auto; }
   .mode-switch button { border: none; background: transparent; padding: 6px 16px; border-radius: 99px; font-size: .8rem; font-weight: 700; cursor: pointer; color: #6b7280; transition: all .15s; }
   .mode-switch button.active { background: #1A1A2E; color: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.15); }
-  body.mode-simple .pro-only { display: none !important; }
-  body:not(.mode-simple) .simple-only { display: none !important; }
+  /* モード切替廃止：常に「社長向け」表示。pro-only は非表示、simple-only は表示 */
+  .pro-only { display: none !important; }
+  .simple-only { display: initial; }
 
   /* ========== タブ ========== */
   .cp-tabs { border-bottom: 2px solid #e5e7eb; display: flex; gap: 0; margin-bottom: 24px; flex-wrap: wrap; }
@@ -181,10 +182,6 @@
   <a href="/financials/{{ fd.id }}/pdf" class="btn btn-sm" style="background:var(--rk-black);color:#fff;" id="pdfBtn" onclick="this.innerHTML='<i class=&quot;fas fa-spinner fa-spin me-1&quot;></i>生成中…(30秒〜2分)'; this.style.pointerEvents='none';">
     <i class="fas fa-file-pdf me-1"></i>PDF出力
   </a>
-  <div class="mode-switch ms-auto" id="modeSwitch">
-    <button data-mode="simple" class="active">👤 社長向け</button>
-    <button data-mode="pro">🧑‍💼 プロ向け</button>
-  </div>
   <span class="small text-muted align-self-center ms-2"><i class="fas fa-robot me-1"></i>Claude</span>
 </div>
 
@@ -1691,9 +1688,7 @@
 {% block scripts %}
 <script>
 (function() {
-  // 表示モード切替（社長向け/プロ向け）
-  const modeBtns = document.querySelectorAll('#modeSwitch button');
-  // 金額を社長向けに1-2桁で表示（入力は万円単位）
+  // 金額を1-2桁で表示（入力は万円単位）
   function formatYenShort(manYen) {
     if (manYen === null || manYen === undefined || isNaN(manYen)) return '—';
     const n = Number(manYen);
@@ -1766,26 +1761,19 @@
     });
   }
 
-  function applyMode(mode) {
-    document.body.classList.toggle('mode-simple', mode === 'simple');
-    modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-    try { localStorage.setItem('cp_mode', mode); } catch(e) {}
-    applyRounding(mode === 'simple');
-    applyShortYen(mode === 'simple');
-  }
+  // モード切替廃止: 常に社長モード相当の表示
+  // 数字丸め（億/千万/万）とパーセント整数化を常時適用
 
   // 課題バッジが入ってるカードに has-issue クラスを自動付与（赤い上ボーダー）
   document.querySelectorAll('.metric-card').forEach(card => {
-    // 課題リンク（issue_badge マクロが生成する a.badge）が含まれてれば has-issue
     if (card.querySelector('a.badge[title*="課題"]')) {
       card.classList.add('has-issue');
     }
   });
-  modeBtns.forEach(b => b.addEventListener('click', () => applyMode(b.dataset.mode)));
-  // 初期モード（保存があれば復元、なければ社長向け）
-  let initMode = 'simple';
-  try { initMode = localStorage.getItem('cp_mode') || 'simple'; } catch(e) {}
-  applyMode(initMode);
+
+  // 初期適用
+  applyRounding(true);
+  applyShortYen(true);
 
   // タブ切替
   const tabs = document.querySelectorAll('.cp-tab');
