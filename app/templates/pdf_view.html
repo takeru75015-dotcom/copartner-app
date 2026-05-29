@@ -116,6 +116,76 @@
       {% endfor %}
     </div>
     {% endif %}
+
+    {# 財務サマリー数字テーブル（社長語） #}
+    <div class="card mt-4" style="border:1px solid var(--rk-border);padding:18px 24px;">
+      <h3 style="font-size:15px;margin-bottom:14px;color:var(--rk-text-muted);font-weight:700;">📊 主要指標サマリー</h3>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--rk-black);">
+            <th style="text-align:left;padding:8px 4px;color:var(--rk-text-muted);font-weight:700;font-size:11px;">指標</th>
+            <th style="text-align:right;padding:8px 4px;color:var(--rk-text-muted);font-weight:700;font-size:11px;">今期</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--rk-text-muted);font-weight:700;font-size:11px;">読み方</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--rk-border);">
+            <td style="padding:10px 4px;">売上高</td>
+            <td style="padding:10px 4px;text-align:right;font-weight:700;">{% if fd.revenue >= 10000 %}{{ "%.1f"|format(fd.revenue/10000) }}億円{% elif fd.revenue >= 1000 %}{{ "%.1f"|format(fd.revenue/1000) }}千万円{% else %}{{ "{:,.0f}".format(fd.revenue) }}万円{% endif %}</td>
+            <td style="padding:10px 12px;color:var(--rk-text-muted);">会社全体の年間売上</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--rk-border);">
+            <td style="padding:10px 4px;">本業のもうけ（営業利益）</td>
+            <td style="padding:10px 4px;text-align:right;font-weight:700;color:{% if fd.operating_profit >= 0 %}#16a34a{% else %}#E60039{% endif %};">{{ "{:+,.0f}".format(fd.operating_profit) }}万円</td>
+            <td style="padding:10px 12px;color:var(--rk-text-muted);">本業だけで稼げてる利益</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--rk-border);">
+            <td style="padding:10px 4px;">手元の現金</td>
+            <td style="padding:10px 4px;text-align:right;font-weight:700;">{% if fd.cash >= 10000 %}{{ "%.1f"|format(fd.cash/10000) }}億円{% elif fd.cash >= 1000 %}{{ "%.1f"|format(fd.cash/1000) }}千万円{% else %}{{ "{:,.0f}".format(fd.cash or 0) }}万円{% endif %}</td>
+            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% if fd.revenue > 0 %}月商{{ "%.1f"|format(fd.cash / (fd.revenue/12)) }}ヶ月分の運転資金{% endif %}</td>
+          </tr>
+          {% if fd.interest_bearing_debt %}
+          <tr style="border-bottom:1px solid var(--rk-border);">
+            <td style="padding:10px 4px;">借入の残り</td>
+            <td style="padding:10px 4px;text-align:right;font-weight:700;color:#E60039;">{% if fd.interest_bearing_debt >= 10000 %}{{ "%.1f"|format(fd.interest_bearing_debt/10000) }}億円{% elif fd.interest_bearing_debt >= 1000 %}{{ "%.1f"|format(fd.interest_bearing_debt/1000) }}千万円{% else %}{{ "{:,.0f}".format(fd.interest_bearing_debt) }}万円{% endif %}</td>
+            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% if cash_burn and cash_burn.debt_repayment_monthly_est %}月{{ "%.0f"|format(cash_burn.debt_repayment_monthly_est) }}万円ペースで返済中{% endif %}</td>
+          </tr>
+          {% endif %}
+          {% if fd.equity and fd.total_assets %}
+          <tr style="border-bottom:1px solid var(--rk-border);">
+            <td style="padding:10px 4px;">自分のお金で経営してる割合（自己資本比率）</td>
+            <td style="padding:10px 4px;text-align:right;font-weight:700;">{{ "%.1f"|format(fd.equity / fd.total_assets * 100) }}%</td>
+            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% set er = fd.equity / fd.total_assets * 100 %}{% if er >= 30 %}健全水準{% elif er >= 10 %}標準範囲{% else %}低めの水準{% endif %}（30%以上で健全）</td>
+          </tr>
+          {% endif %}
+          {% if cash_wc and cash_wc.receivables_days %}
+          <tr style="border-bottom:1px solid var(--rk-border);">
+            <td style="padding:10px 4px;">売掛金が現金になるまでの日数</td>
+            <td style="padding:10px 4px;text-align:right;font-weight:700;">{{ cash_wc.receivables_days }}日</td>
+            <td style="padding:10px 12px;color:var(--rk-text-muted);">{% if cash_wc.receivables_days <= 45 %}短くて健全{% elif cash_wc.receivables_days <= 60 %}標準{% else %}長めで回収遅延の可能性{% endif %}</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {# 推移グラフ（過去複数期がある場合だけ） #}
+    {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+    <div class="row g-3 mt-4">
+      <div class="col-6">
+        <div class="card" style="border:1px solid var(--rk-border);padding:18px;">
+          <h3 style="font-size:14px;margin-bottom:12px;color:var(--rk-text-muted);font-weight:700;">📈 売上・本業のもうけ 推移</h3>
+          <div style="height:240px;"><canvas id="pdfPL"></canvas></div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="card" style="border:1px solid var(--rk-border);padding:18px;">
+          <h3 style="font-size:14px;margin-bottom:12px;color:var(--rk-text-muted);font-weight:700;">💰 手元の現金 推移</h3>
+          <div style="height:240px;"><canvas id="pdfCash"></canvas></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -148,16 +218,59 @@
   {% endif %}
 
   {# 提案 #}
-  {% if pdf_content.narrative_proposal %}
+  {% if pdf_content.narrative_proposal or result.prioritized_problems %}
   <div class="pdf-section">
     <div class="pdf-section-title">
       <span class="bar"></span>
       <span class="num">05</span>
       <h2>これからのご提案</h2>
     </div>
+    {% if pdf_content.narrative_proposal %}
     <div class="pdf-block proposal">
       <p class="narrative">{{ pdf_content.narrative_proposal }}</p>
     </div>
+    {% endif %}
+
+    {# 採用済み（dismissed除外済み）の課題→ソリューション一覧 #}
+    {% if result.prioritized_problems %}
+    <div class="mt-4">
+      {% for p in result.prioritized_problems %}
+      {% if p.solutions %}
+      <div class="card mb-3" style="border:1px solid var(--rk-border);border-left:4px solid {% if p.severity == '高' %}var(--rk-accent){% elif p.severity == '中' %}#6B7280{% else %}#9CA3AF{% endif %};padding:18px 22px;">
+        <div style="font-size:11px;color:var(--rk-text-muted);font-weight:700;letter-spacing:.05em;margin-bottom:4px;">課題 #{{ p.rank }} ／ 重要度 {{ p.severity }}</div>
+        <h3 style="font-size:16px;margin-bottom:14px;">{{ p.title }}</h3>
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--rk-border);">
+              <th style="text-align:left;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:40%;">打ち手</th>
+              <th style="text-align:center;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:14%;">期待効果（年）</th>
+              <th style="text-align:center;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:10%;">期間</th>
+              <th style="text-align:center;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:8%;">難易度</th>
+              <th style="text-align:left;padding:6px 4px;color:var(--rk-text-muted);font-weight:700;width:28%;">最初の一歩</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sol in p.solutions %}
+            <tr style="border-bottom:1px solid var(--rk-border);">
+              <td style="padding:8px 4px;font-weight:600;">{{ sol.title }}</td>
+              <td style="padding:8px 4px;text-align:center;color:#16a34a;font-weight:700;">+{{ "{:,.0f}".format(sol.impact_min or 0) }}〜{{ "{:,.0f}".format(sol.impact_max or 0) }}万</td>
+              <td style="padding:8px 4px;text-align:center;font-size:11px;">{{ sol.timeframe or '—' }}</td>
+              <td style="padding:8px 4px;text-align:center;font-size:11px;">{{ sol.difficulty or '—' }}</td>
+              <td style="padding:8px 4px;font-size:11px;color:var(--rk-text-muted);">{{ sol.first_step or '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if p.expected_outcome %}
+        <div style="background:#F7F7F9;border-left:3px solid #16a34a;padding:10px 14px;margin-top:12px;font-size:12px;line-height:1.7;">
+          <strong style="color:#16a34a;">🎯 予想効果:</strong> {{ p.expected_outcome }}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -199,4 +312,66 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+  const periods = {{ result.trend_metrics.periods|tojson }};
+  const rev = {{ (result.trend_metrics.revenue or [])|tojson }};
+  const op = {{ (result.trend_metrics.operating_profit or [])|tojson }};
+  const cash = {{ (result.trend_metrics.cash or [])|tojson }};
+
+  // PL推移（売上+営業利益）
+  const plEl = document.getElementById('pdfPL');
+  if (plEl && window.Chart) {
+    new Chart(plEl, {
+      type: 'bar',
+      data: {
+        labels: periods,
+        datasets: [
+          { label: '売上', data: rev, backgroundColor: '#0F0F19', order: 2 },
+          { label: '本業のもうけ', data: op, type: 'line', borderColor: '#E60039', backgroundColor: '#E60039',
+            borderWidth: 3, pointRadius: 5, pointBackgroundColor: '#E60039', tension: 0.2, order: 1 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+        scales: {
+          y: { ticks: { callback: v => (v >= 10000 ? (v/10000).toFixed(1) + '億' : v.toLocaleString() + '万'), font: { size: 10 } }},
+          x: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  // 現預金推移
+  const cashEl = document.getElementById('pdfCash');
+  if (cashEl && window.Chart) {
+    new Chart(cashEl, {
+      type: 'line',
+      data: {
+        labels: periods,
+        datasets: [{
+          label: '手元の現金', data: cash,
+          borderColor: '#0F0F19', backgroundColor: 'rgba(15,15,25,0.1)',
+          borderWidth: 3, pointRadius: 6, pointBackgroundColor: '#0F0F19',
+          fill: true, tension: 0.2,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { ticks: { callback: v => (v >= 10000 ? (v/10000).toFixed(1) + '億' : v.toLocaleString() + '万'), font: { size: 10 } }},
+          x: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+  {% endif %}
+})();
+</script>
 {% endblock %}

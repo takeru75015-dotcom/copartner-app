@@ -805,11 +805,16 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
                 if key not in tm or not tm.get(key):
                     tm[key] = [(getattr(period_to_fd.get(p), key, 0) or 0) if period_to_fd.get(p) else 0 for p in sorted_periods]
             result["trend_metrics"] = tm
+        try:
+            dismissed_sols = json.loads(existing.dismissed_solutions or "[]")
+        except Exception:
+            dismissed_sols = []
         return templates.TemplateResponse("analysis.html", {
             "request": request, "user": user, "client": cl, "fd": fd, "result": result,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
-            "analysis_id": existing.id, "cached": True
+            "analysis_id": existing.id, "cached": True,
+            "dismissed_solutions": dismissed_sols,
         })
 
     # 同じクライアントの"現在見ている期"までのデータを取得（未来データは入れない）
@@ -923,6 +928,52 @@ async def save_hearing_and_reanalyze(client_id: int, request: Request, db: Sessi
     return RedirectResponse(f"/clients/{client_id}", status_code=302)
 
 
+@app.post("/financials/{fd_id}/dismiss-solution")
+async def dismiss_solution(fd_id: int, request: Request, db: Session = Depends(get_db)):
+    """提案を削除/復活する（トグル動作）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return RedirectResponse("/dashboard", status_code=302)
+    analysis = db.query(Analysis).filter(
+        Analysis.financial_data_id == fd_id
+    ).order_by(Analysis.created_at.desc()).first()
+    if not analysis:
+        return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+
+    form = await request.form()
+    sol_id = form.get("sol_id", "").strip()
+    if not sol_id:
+        return RedirectResponse(f"/financials/{fd_id}/analyze#panel-advice", status_code=302)
+
+    try:
+        dismissed = json.loads(analysis.dismissed_solutions or "[]")
+    except Exception:
+        dismissed = []
+
+    # トグル：あれば削除、なければ追加
+    if sol_id in dismissed:
+        dismissed.remove(sol_id)
+    else:
+        dismissed.append(sol_id)
+
+    analysis.dismissed_solutions = json.dumps(dismissed)
+    # PDF再生成を促すためキャッシュ削除
+    try:
+        result = json.loads(analysis.result_json)
+        if "owner_pdf_content" in result:
+            del result["owner_pdf_content"]
+            analysis.result_json = json.dumps(result, ensure_ascii=False)
+    except Exception:
+        pass
+    db.commit()
+    return RedirectResponse(f"/financials/{fd_id}/analyze#panel-advice", status_code=302)
+
+
 @app.get("/financials/{fd_id}/pdf-view", response_class=HTMLResponse)
 def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
     """PDF用の社長プレゼン版ビュー（Playwright経由で読み込まれる）"""
@@ -943,18 +994,39 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
 
     result = json.loads(existing.result_json)
-    pdf_content = result.get("owner_pdf_content")
 
-    # キャッシュなければ生成して保存（トークン消費は1回だけ）
+    # 削除済みソリューションを除外したフィルタ済みresultを作る
+    try:
+        dismissed = set(json.loads(existing.dismissed_solutions or "[]"))
+    except Exception:
+        dismissed = set()
+    filtered_problems = []
+    for p in result.get("prioritized_problems", []) or []:
+        kept_sols = []
+        for idx, sol in enumerate(p.get("solutions") or []):
+            sol_id = f"{p.get('rank')}_{idx}"
+            if sol_id not in dismissed:
+                kept_sols.append(sol)
+        # 採用されたソリューションが0個なら課題ごと除外（任意）
+        if kept_sols or not p.get("solutions"):
+            p_copy = dict(p)
+            p_copy["solutions"] = kept_sols
+            filtered_problems.append(p_copy)
+    filtered_result = dict(result)
+    filtered_result["prioritized_problems"] = filtered_problems
+
+    pdf_content = filtered_result.get("owner_pdf_content")
+
+    # 削除を変更してキャッシュ無効化されていれば再生成
     if not pdf_content:
         try:
             from .claude_client import generate_owner_pdf_content
-            pdf_content = generate_owner_pdf_content(result, fd, cl.name, fd.period)
+            pdf_content = generate_owner_pdf_content(filtered_result, fd, cl.name, fd.period)
+            # 元のresultに保存（dismissed_solutionsに紐づいた状態のキャッシュ）
             result["owner_pdf_content"] = pdf_content
             existing.result_json = json.dumps(result, ensure_ascii=False)
             db.commit()
         except Exception as e:
-            # 生成失敗時は既存の owner_message を fallback として最低限の dict を作る
             print(f"[pdf_view] narrative generation failed: {e}")
             pdf_content = {
                 "cover_subtitle": "経営分析レポート",
@@ -969,12 +1041,29 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
                 "closing": "",
             }
 
+    # cash_burn/wc/ebitda/cf もテンプレに必要
+    from .services.cash_analysis import compute_burn_rate, compute_working_capital, compute_ebitda, compute_cf_buckets
+    try:
+        breakdown = json.loads(fd.breakdown_json or "{}")
+    except Exception:
+        breakdown = {}
+    cash_burn = compute_burn_rate(fd)
+    cash_wc = compute_working_capital(fd)
+    cash_ebitda = compute_ebitda(fd, breakdown)
+    _all_fds_for_cf = db.query(FinancialData).join(Client).filter(Client.id == fd.client_id).all()
+    cash_cf = compute_cf_buckets(fd, breakdown=breakdown, historical_data=_all_fds_for_cf)
+
     return templates.TemplateResponse("pdf_view.html", {
         "request": request,
         "client": cl,
         "fd": fd,
         "pdf_content": pdf_content,
-        "result": result,
+        "result": filtered_result,  # フィルタ済み（削除済み除外）
+        "breakdown": breakdown,
+        "cash_burn": cash_burn,
+        "cash_wc": cash_wc,
+        "cash_ebitda": cash_ebitda,
+        "cash_cf": cash_cf,
         "user": user,
     })
 

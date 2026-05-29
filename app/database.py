@@ -70,6 +70,7 @@ class Analysis(Base):
     id = Column(Integer, primary_key=True, index=True)
     financial_data_id = Column(Integer, ForeignKey("financial_data.id"), nullable=False)
     result_json = Column(Text, nullable=False)
+    dismissed_solutions = Column(Text, default="[]")  # 削除した提案ID（"{rank}_{sol_idx}"）のJSON配列
     created_at = Column(DateTime, default=datetime.utcnow)
     financial_data = relationship("FinancialData", back_populates="analyses")
 

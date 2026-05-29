@@ -19,6 +19,8 @@ def migrate():
     # clients.business_details
     _add_column(cursor, "clients", "business_details", "TEXT DEFAULT ''")
     _add_column(cursor, "clients", "hearing_answers", "TEXT DEFAULT '{}'")
+    # analyses.dismissed_solutions
+    _add_column(cursor, "analyses", "dismissed_solutions", "TEXT DEFAULT '[]'")
 
     # users.referral_code（アフィ紹介ID）
     _add_column(cursor, "users", "referral_code", "TEXT DEFAULT ''")
