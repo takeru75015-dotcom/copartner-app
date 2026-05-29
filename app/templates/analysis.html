@@ -400,12 +400,25 @@
 
   {# PL積み上げ棒（複数期比較） — 北村先生FB対応 #}
   {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
-  <div class="card p-3 mb-4">
-    <h6 class="fw-bold mb-3"><i class="fas fa-chart-bar me-2"></i>PL推移（売上 vs 費用構造）</h6>
-    <div style="position:relative;height:320px;">
-      <canvas id="plStackBar"></canvas>
+  <div class="row g-3 mb-4">
+    <div class="col-md-7">
+      <div class="card p-3 h-100">
+        <h6 class="fw-bold mb-3"><i class="fas fa-chart-bar me-2"></i>売上 vs 費用構造</h6>
+        <div style="position:relative;height:280px;">
+          <canvas id="plStackBar"></canvas>
+        </div>
+        <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>棒：費用の積み上げ（売上原価＋販管費）／ 点線：売上高。点線が棒より高ければ黒字。</div>
+      </div>
     </div>
-    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>左の棒：費用の積み上げ（売上原価＋販管費＋営業利益）／ 右の点線：売上高。費用が売上を超えると赤字。</div>
+    <div class="col-md-5">
+      <div class="card p-3 h-100">
+        <h6 class="fw-bold mb-3"><i class="fas fa-chart-line me-2"></i>営業利益の推移</h6>
+        <div style="position:relative;height:280px;">
+          <canvas id="plOpProfit"></canvas>
+        </div>
+        <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>0より上が黒字、下が赤字。</div>
+      </div>
+    </div>
   </div>
   {% endif %}
 
@@ -1813,7 +1826,7 @@
   {% if ca_items %}drawPie('chartCA', {{ ca_items|map(attribute=0)|list|tojson }}, {{ ca_items|map(attribute=1)|list|tojson }});{% endif %}
   {% if cl_items %}drawPie('chartCL', {{ cl_items|map(attribute=0)|list|tojson }}, {{ cl_items|map(attribute=1)|list|tojson }});{% endif %}
 
-  // PL積み上げ棒（売上原価+販管費+営業利益 vs 売上高）
+  // PL左：売上 vs 費用構造（売上原価＋販管費の積み上げ + 売上高点線）
   (function() {
     const el = document.getElementById('plStackBar');
     if (!el) return;
@@ -1821,11 +1834,7 @@
     const labels = {{ result.trend_metrics.periods|tojson }};
     const cos = {{ (result.trend_metrics.cost_of_sales or [])|tojson }};
     const sel = {{ (result.trend_metrics.selling_expenses or [])|tojson }};
-    const op = {{ (result.trend_metrics.operating_profit or [])|tojson }};
     const rev = {{ (result.trend_metrics.revenue or [])|tojson }};
-    // 負の営業利益は分けて表示（積み上げの足し算が崩れないように）
-    const opPos = op.map(v => v >= 0 ? v : 0);
-    const opNeg = op.map(v => v < 0 ? v : 0);
     new Chart(el, {
       type: 'bar',
       data: {
@@ -1833,8 +1842,6 @@
         datasets: [
           { label: '売上原価', data: cos, backgroundColor: '#9CA3AF', stack: 'cost' },
           { label: '販管費', data: sel, backgroundColor: '#374151', stack: 'cost' },
-          { label: '営業利益', data: opPos, backgroundColor: '#16a34a', stack: 'cost' },
-          { label: '営業赤字', data: opNeg, backgroundColor: '#E60039', stack: 'cost' },
           { label: '売上高', data: rev, type: 'line', borderColor: '#0F0F19', backgroundColor: 'transparent', borderWidth: 2, borderDash: [4, 4], pointRadius: 5, pointBackgroundColor: '#0F0F19', tension: 0 }
         ]
       },
@@ -1842,6 +1849,40 @@
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}万円` } } },
         scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v.toLocaleString() } } }
+      }
+    });
+    {% endif %}
+  })();
+
+  // PL右：営業利益の推移（黒字=緑棒、赤字=赤棒）
+  (function() {
+    const el = document.getElementById('plOpProfit');
+    if (!el) return;
+    {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
+    const labels = {{ result.trend_metrics.periods|tojson }};
+    const op = {{ (result.trend_metrics.operating_profit or [])|tojson }};
+    new Chart(el, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: '営業利益',
+          data: op,
+          backgroundColor: op.map(v => v >= 0 ? '#16a34a' : '#E60039'),
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `営業${ctx.parsed.y >= 0 ? '利益' : '赤字'}: ${ctx.parsed.y.toLocaleString()}万円` } }
+        },
+        scales: {
+          y: {
+            ticks: { callback: v => v.toLocaleString() },
+            grid: { color: (ctx) => ctx.tick.value === 0 ? '#0F0F19' : '#E5E7EB' }
+          }
+        }
       }
     });
     {% endif %}
