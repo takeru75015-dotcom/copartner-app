@@ -58,9 +58,10 @@ def _call_llm(prompt: str, provider: str = None) -> str:
 
     if p == "claude":
         client = _get_claude()
-        message = client.messages.create(
+        message = _call_claude_with_retry(
+            client,
             model=CLAUDE_MODEL,
-            max_tokens=16000,  # 新スキーマ（統合プラン・売上アイデア等）で8k超えるため拡大。Sonnet 4.6 以降推奨
+            max_tokens=16000,
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text.strip()
@@ -268,7 +269,8 @@ def extract_ledger_summary_from_pdf(pdf_bytes: bytes, filename: str, doc_type: s
 """
 
     client = _get_claude()
-    message = client.messages.create(
+    message = _call_claude_with_retry(
+        client,
         model=CLAUDE_MODEL,
         max_tokens=6000,
         messages=[{
@@ -331,7 +333,8 @@ def extract_business_context_from_pdf(pdf_bytes: bytes, filename: str) -> str:
 ファイル名: {filename}"""
 
     client = _get_claude()
-    message = client.messages.create(
+    message = _call_claude_with_retry(
+        client,
         model=CLAUDE_MODEL,
         max_tokens=6000,
         messages=[{
@@ -343,6 +346,35 @@ def extract_business_context_from_pdf(pdf_bytes: bytes, filename: str) -> str:
         }],
     )
     return message.content[0].text.strip()
+
+
+def _call_claude_with_retry(client, **kwargs):
+    """Claude API 呼び出し（rate_limit 時の自動リトライ付き）"""
+    import time
+    max_retries = 4
+    for attempt in range(max_retries):
+        try:
+            return client.messages.create(**kwargs)
+        except Exception as e:
+            err_str = str(e)
+            # 429 / overloaded_error / rate_limit_error
+            is_rate = ('429' in err_str or 'rate_limit' in err_str or
+                       'overloaded' in err_str.lower())
+            if is_rate and attempt < max_retries - 1:
+                # サーバから retry-after があれば利用、無ければ指数バックオフ
+                retry_after = 30  # デフォルト30秒
+                try:
+                    if hasattr(e, 'response') and e.response is not None:
+                        ra = e.response.headers.get('retry-after')
+                        if ra:
+                            retry_after = int(ra)
+                except Exception:
+                    pass
+                wait = min(retry_after, 5 * (2 ** attempt))  # 最大80秒
+                print(f"[claude_client] rate limit hit, retry {attempt+1}/{max_retries} after {wait}s")
+                time.sleep(wait)
+                continue
+            raise
 
 
 def extract_financials_from_pdf_binary(pdf_bytes: bytes, filename: str) -> dict:
@@ -373,7 +405,8 @@ def extract_financials_from_pdf_binary(pdf_bytes: bytes, filename: str) -> dict:
 {_PDF_EXTRACTION_SCHEMA}"""
 
     client = _get_claude()
-    message = client.messages.create(
+    message = _call_claude_with_retry(
+        client,
         model=CLAUDE_MODEL,
         max_tokens=_max_tokens,
         messages=[{

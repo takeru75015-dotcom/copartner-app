@@ -687,7 +687,13 @@ async def upload_pdf(client_id: int, request: Request,
                     try:
                         data = extract_financials_from_pdf_binary(content, file.filename)
                     except Exception as ve:
-                        errors.append(f"{file.filename}: 画像PDF読取失敗: {str(ve)[:100]}")
+                        ve_str = str(ve)
+                        if '429' in ve_str or 'rate_limit' in ve_str:
+                            errors.append(f"{file.filename}: ⏱ AIのレート制限に達しました。数分待ってから再アップロードしてください")
+                        elif 'overloaded' in ve_str.lower():
+                            errors.append(f"{file.filename}: 🔥 AIサーバが混雑中です。数分待ってから再アップロードしてください")
+                        else:
+                            errors.append(f"{file.filename}: 画像PDF読取失敗: {ve_str[:100]}")
                         continue
                 else:
                     errors.append(f"{file.filename}: テキスト抽出失敗。画像PDFはClaude切替時のみ対応（AI_PROVIDER=claude）")
