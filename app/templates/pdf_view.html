@@ -10,22 +10,29 @@
     --rk-border: #E5E7EB;
     --rk-text-muted: #6B7280;
   }
-  body { background: #fff; font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; color: var(--rk-black); }
+  body { background: #fff; font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; color: var(--rk-black); margin: 0; padding: 0; }
   .navbar, .mode-switch, a.btn[href*="/clients"] { display: none !important; }
-  .pdfv { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  /* Bootstrap container を無効化してフル幅に */
+  .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; }
+  body > .container { padding: 0 !important; }
+  .pdfv { width: 100%; max-width: 100%; margin: 0; padding: 0; }
   .pdfv h1, .pdfv h2, .pdfv h3 { color: var(--rk-black); font-weight: 800; letter-spacing: 0.02em; }
-  .pdfv p { line-height: 1.85; font-size: 14px; }
+  .pdfv p { line-height: 1.75; font-size: 13px; }
 
-  /* 表紙 */
-  .pdf-cover { background: var(--rk-black); color: #fff; padding: 80px 60px; border-radius: 0; min-height: 600px; display: flex; flex-direction: column; justify-content: center; }
-  .pdf-cover .label { font-size: 13px; letter-spacing: .15em; color: #94a3b8; border-left: 3px solid var(--rk-accent); padding-left: 10px; margin-bottom: 24px; }
-  .pdf-cover h1 { color: #fff; font-size: 38px; margin-bottom: 8px; line-height: 1.3; }
-  .pdf-cover .period { font-size: 18px; color: #cbd5e1; margin-bottom: 32px; }
-  .pdf-cover .subtitle { font-size: 22px; color: #fff; font-weight: 600; line-height: 1.6; max-width: 800px; }
-  .pdf-cover .footer { margin-top: 60px; font-size: 12px; color: #94a3b8; }
+  /* 表紙 — A4縦サイズに合わせて全面塗りつぶし */
+  .pdf-cover { background: var(--rk-black); color: #fff; padding: 90px 60px; border-radius: 0; width: 100%; min-height: 950px; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; }
+  .pdf-cover .label { font-size: 13px; letter-spacing: .15em; color: #94a3b8; border-left: 3px solid var(--rk-accent); padding-left: 10px; margin-bottom: 28px; }
+  .pdf-cover h1 { color: #fff; font-size: 30px; margin-bottom: 10px; line-height: 1.3; }
+  .pdf-cover .period { font-size: 16px; color: #cbd5e1; margin-bottom: 36px; }
+  .pdf-cover .subtitle { font-size: 18px; color: #fff; font-weight: 600; line-height: 1.7; max-width: 100%; }
+  .pdf-cover .footer { margin-top: 80px; font-size: 11px; color: #94a3b8; }
 
-  /* セクション */
-  .pdf-section { margin: 48px 0 32px; page-break-before: always; }
+  /* 各セクション内側にだけパディング */
+  .pdf-section { padding: 0 18px; }
+
+  /* セクション — 強制改ページしない。長いセクションのみ自然に改ページ */
+  .pdf-section { margin: 36px 0 28px; padding: 0 6px; }
+  .pdf-section + .pdf-section { border-top: 2px solid var(--rk-border); padding-top: 28px; }
   .pdf-section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid var(--rk-black); }
   .pdf-section-title .bar { width: 5px; height: 28px; background: var(--rk-accent); }
   .pdf-section-title .num { background: var(--rk-accent); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 700; min-width: 36px; text-align: center; }
@@ -91,10 +98,13 @@
   @media print {
     .navbar, .alert, button, a.btn { display: none !important; }
     .pdfv { padding: 0; }
-    .pdf-section { page-break-before: always; }
-    .pdf-cover { page-break-after: always; min-height: auto; padding: 60px 40px; }
-    .issue-card, .solution-card, .tax-card, .conclusion-block, .strength-block { page-break-inside: avoid; }
-    @page { size: A4 landscape; margin: 14mm 14mm; }
+    /* カバー直後と「課題への提案」セクションだけ改ページ。それ以外は自然な流れ */
+    .pdf-cover { page-break-after: always; padding: 90px 50px; min-height: calc(297mm - 24mm); display: flex; flex-direction: column; justify-content: center; }
+    .pdf-section { page-break-before: auto; page-break-inside: auto; }
+    .issue-card, .solution-card, .tax-card, .conclusion-block, .strength-block, .kpi-card { page-break-inside: avoid; }
+    /* 大見出しはコンテンツと一緒に */
+    .pdf-section-title { page-break-after: avoid; }
+    @page { size: A4 portrait; margin: 12mm 12mm; }
   }
 </style>
 {% endblock %}
