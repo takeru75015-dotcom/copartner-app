@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block title %}{{ kit.pdf_payload.headline }}{% endblock %}
+{% block head %}
+<style>
+  :root { --rk-black:#0F0F19; --rk-accent:#E60039; --rk-bg:#F7F7F9; --rk-border:#E5E7EB; --rk-muted:#6B7280; }
+  body { background:#fff; font-family:'Hiragino Sans','Yu Gothic',sans-serif; color:var(--rk-black); margin:0; padding:0; }
+  .navbar, a.btn[href*="/clients"] { display:none !important; }
+  .container, .container-fluid { max-width:100% !important; width:100% !important; padding:0 !important; margin:0 !important; }
+  .rkit-page { padding: 30px 38px; max-width:100%; }
+  .rkit-header { background: var(--rk-black); color:#fff; padding:24px 32px; border-radius:0; }
+  .rkit-header .label { font-size:12px; letter-spacing:.18em; color:#94a3b8; border-left:3px solid var(--rk-accent); padding-left:10px; margin-bottom:14px; }
+  .rkit-header h1 { font-size:24px; margin:0 0 10px; color:#fff; line-height:1.4; }
+  .rkit-header .sub { font-size:14px; color:#cbd5e1; line-height:1.7; max-width:90%; }
+  .rkit-section { padding: 22px 32px; border-bottom:1px solid var(--rk-border); }
+  .rkit-section h2 { font-size:14px; font-weight:800; color:var(--rk-black); margin:0 0 8px; letter-spacing:.05em; }
+  .rkit-section .content { font-size:15px; line-height:1.85; color:var(--rk-black); }
+  .rkit-effect-row { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; padding: 22px 32px; background:var(--rk-bg); }
+  .rkit-effect-card { background:#fff; border:1px solid var(--rk-border); border-top:3px solid var(--rk-accent); padding:14px 16px; border-radius:6px; }
+  .rkit-effect-card .label { font-size:11px; color:var(--rk-muted); font-weight:700; letter-spacing:.05em; }
+  .rkit-effect-card .value { font-size:18px; font-weight:900; color:var(--rk-black); margin-top:6px; }
+  .rkit-qr { display:grid; grid-template-columns: 1fr 200px; gap:18px; padding:22px 32px; background:var(--rk-black); color:#fff; }
+  .rkit-qr .left h2 { color:#fff; font-size:14px; margin:0 0 8px; }
+  .rkit-qr .url-text { font-size:11px; color:#cbd5e1; word-break:break-all; margin-top:8px; line-height:1.5; }
+  .rkit-qr .right { text-align:center; }
+  .rkit-qr .right img { background:#fff; padding:8px; border-radius:6px; max-width:180px; }
+  .rkit-foot { padding:22px 32px; background:#fff; border-top:2px solid var(--rk-black); color:var(--rk-muted); font-size:11px; line-height:1.7; text-align:center; }
+  @media print {
+    @page { size: A4 portrait; margin: 12mm 12mm; }
+    .navbar, .alert, button { display:none !important; }
+    body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="rkit-page">
+  <div class="rkit-header">
+    <div class="label">SERVICE INTRODUCTION / 提携先サービスのご紹介</div>
+    <h1>{{ kit.pdf_payload.headline }}</h1>
+    <div class="sub">{{ kit.pdf_payload.subhead }}</div>
+  </div>
+
+  <div class="rkit-section">
+    <h2>■ サービス概要</h2>
+    <div class="content">{{ kit.pdf_payload.service_summary }}</div>
+  </div>
+
+  <div class="rkit-effect-row">
+    <div class="rkit-effect-card">
+      <div class="label">期待効果</div>
+      <div class="value">{{ kit.pdf_payload.expected_effect }}</div>
+    </div>
+    <div class="rkit-effect-card">
+      <div class="label">想定期間</div>
+      <div class="value">{{ kit.pdf_payload.timeframe }}</div>
+    </div>
+    <div class="rkit-effect-card">
+      <div class="label">最初の一歩</div>
+      <div class="value" style="font-size:13px;">{{ kit.pdf_payload.first_step }}</div>
+    </div>
+  </div>
+
+  <div class="rkit-qr">
+    <div class="left">
+      <h2>■ お申込み・詳細はこちらから</h2>
+      <div style="font-size:13px;line-height:1.7;">
+        右のQRコードをスマートフォンで読み取るか、下記URLにアクセスしてください。<br>
+        初回相談は無料です。
+      </div>
+      <div class="url-text">{{ kit.referral_url }}</div>
+    </div>
+    <div class="right">
+      <img src="{{ kit.pdf_payload.qr_url }}" alt="QR">
+      <div style="font-size:10px;color:#cbd5e1;margin-top:6px;">スマホで読取</div>
+    </div>
+  </div>
+
+  <div class="rkit-foot">
+    <div>提供: {{ kit.pdf_payload.tax_office_name or '弊事務所' }}</div>
+    <div>{{ kit.pdf_payload.client_name }} 御中</div>
+    <div style="margin-top:8px;">本資料は経営分析レポートと共にご活用ください。</div>
+  </div>
+</div>
+{% endblock %}

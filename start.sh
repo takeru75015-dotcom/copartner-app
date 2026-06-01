@@ -24,5 +24,10 @@ else
     echo "warning: venv not found. system python を使用します"
 fi
 
+# DB マイグレーション（既存 DB に新カラム追加。新規 DB はスキップ）
+# これを忘れると /login で "no such column" エラーで死ぬ
+echo "→ Running migrations..."
+python -m app.migrate || echo "warning: migration step failed (continuing anyway)"
+
 # uvicorn 起動（README.md と一致：127.0.0.1:8000）
 exec python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000

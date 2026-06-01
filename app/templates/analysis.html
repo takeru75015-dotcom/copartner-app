@@ -838,6 +838,51 @@
             {% if sol.why %}
             <div class="small mt-2" style="color:#0F0F19;">なぜ効くか: {{ sol.why }}</div>
             {% endif %}
+            {# 💼 税理士アップセル候補バッジ #}
+            {% if sol.tax_accountant_upsell %}
+            <div class="mt-2 p-2" style="background:linear-gradient(90deg,#fff7e6,#fef3c7);border-left:3px solid #d97706;border-radius:4px;">
+              <div class="d-flex align-items-start gap-2">
+                <span style="font-size:1.1em;">💼</span>
+                <div>
+                  <div class="small fw-bold" style="color:#92400e;">税理士の追加サービス候補（アップセル）</div>
+                  <div class="small mt-1" style="color:#78350f;">{{ sol.upsell_message or 'この打ち手は税理士の月次顧問業務の範囲外となる可能性があります。御社の税理士に相談すると対応してもらえるかもしれませんが、別途お見積もりとなる場合があります。' }}</div>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+            {# 🌐 外部パートナー紹介バッジ #}
+            {% if sol.executor == 'referral_partner' and sol.referral_partner_type %}
+            <div class="mt-2 p-2" style="background:#eff6ff;border-left:3px solid #2563eb;border-radius:4px;">
+              <div class="d-flex align-items-start gap-2">
+                <span style="font-size:1.1em;">🌐</span>
+                <div>
+                  <div class="small fw-bold" style="color:#1e40af;">外部パートナー紹介可</div>
+                  <div class="small mt-1" style="color:#1e3a8a;">紹介先: {{ sol.referral_partner_type }}</div>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+            {# 🌟 紹介キット（口頭/メール/PDF）— 採択提案で紹介先候補があるときに表示 #}
+            {% if not is_dismissed and (sol.referral_partner_type or sol.executor == 'referral_partner') %}
+            {% set sol_id = (p.rank|string) ~ '_' ~ (loop.index0|string) %}
+            <div class="mt-2 d-flex gap-2 flex-wrap">
+              <button type="button" class="btn btn-sm" style="background:#fff;color:#0F0F19;border:1px solid #0F0F19;"
+                onclick="openReferralKit({{ fd.id }}, '{{ sol_id }}', 'memo', '{{ sol.title|e }}')"
+                title="社長との面談中、口頭で説明するための要点メモ + QRコード">
+                <i class="fas fa-comments me-1"></i>口頭メモ
+              </button>
+              <button type="button" class="btn btn-sm" style="background:#fff;color:#0F0F19;border:1px solid #0F0F19;"
+                onclick="openReferralKit({{ fd.id }}, '{{ sol_id }}', 'email', '{{ sol.title|e }}')"
+                title="後日メール送信用の件名・本文を自動生成・コピー">
+                <i class="fas fa-envelope me-1"></i>メール文面
+              </button>
+              <a href="/financials/{{ fd.id }}/referral-pdf-download/{{ sol_id }}"
+                 class="btn btn-sm" style="background:#0F0F19;color:#fff;border:none;"
+                 title="社長への手渡し用1ページPDFをダウンロード">
+                <i class="fas fa-file-download me-1"></i>紹介PDF
+              </a>
+            </div>
+            {% endif %}
             {# 該当アフィ商品への申し込みボタン #}
             {% if sol.affiliate_categories %}
             <div class="mt-2 d-flex gap-2 flex-wrap">
@@ -1112,6 +1157,30 @@
               {% endif %}
             </div>
             {% if sol.why %}<div class="small mt-2" style="color:#0F0F19;">なぜ効くか: {{ sol.why }}</div>{% endif %}
+            {# 💼 税理士アップセル候補バッジ #}
+            {% if sol.tax_accountant_upsell %}
+            <div class="mt-2 p-2" style="background:linear-gradient(90deg,#fff7e6,#fef3c7);border-left:3px solid #d97706;border-radius:4px;">
+              <div class="d-flex align-items-start gap-2">
+                <span style="font-size:1.1em;">💼</span>
+                <div>
+                  <div class="small fw-bold" style="color:#92400e;">税理士の追加サービス候補（アップセル）</div>
+                  <div class="small mt-1" style="color:#78350f;">{{ sol.upsell_message or 'この打ち手は税理士の月次顧問業務の範囲外となる可能性があります。御社の税理士に相談すると対応してもらえるかもしれませんが、別途お見積もりとなる場合があります。' }}</div>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+            {# 🌐 外部パートナー紹介バッジ #}
+            {% if sol.executor == 'referral_partner' and sol.referral_partner_type %}
+            <div class="mt-2 p-2" style="background:#eff6ff;border-left:3px solid #2563eb;border-radius:4px;">
+              <div class="d-flex align-items-start gap-2">
+                <span style="font-size:1.1em;">🌐</span>
+                <div>
+                  <div class="small fw-bold" style="color:#1e40af;">外部パートナー紹介可</div>
+                  <div class="small mt-1" style="color:#1e3a8a;">紹介先: {{ sol.referral_partner_type }}</div>
+                </div>
+              </div>
+            </div>
+            {% endif %}
             {% if sol.affiliate_categories %}
             <div class="mt-2 d-flex gap-2 flex-wrap">
               {% for cat in sol.affiliate_categories %}
@@ -2152,5 +2221,127 @@
   {% endif %}
   {% endif %}
 })();
+</script>
+
+{# ============================================================ #}
+{# 紹介キット モーダル（口頭メモ / メール文面）— 採択提案ごとに動的にfetch #}
+{# ============================================================ #}
+<div class="modal fade" id="referralKitModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#0F0F19;color:#fff;">
+        <h5 class="modal-title" id="referralKitTitle">紹介キット</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="referralKitBody">
+        <div class="text-center py-5 text-muted">
+          <div class="spinner-border" role="status"></div>
+          <div class="mt-2">生成中...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+        <button type="button" class="btn btn-sm" id="referralKitCopyBtn" style="background:#0F0F19;color:#fff;border:none;display:none;">
+          <i class="fas fa-copy me-1"></i>クリップボードにコピー
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _referralCopyTarget = "";  // クリップボードにコピーする対象テキスト
+
+function openReferralKit(fdId, solId, mode, solTitle) {
+  const modalEl = document.getElementById('referralKitModal');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  document.getElementById('referralKitTitle').textContent =
+    (mode === 'email' ? '📧 メール文面: ' : '📞 口頭メモ: ') + solTitle;
+  document.getElementById('referralKitBody').innerHTML =
+    '<div class="text-center py-5 text-muted"><div class="spinner-border" role="status"></div><div class="mt-2">生成中...</div></div>';
+  document.getElementById('referralKitCopyBtn').style.display = 'none';
+  modal.show();
+
+  fetch(`/financials/${fdId}/referral-kit/${solId}?mode=${mode}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data || !data.kit) {
+        document.getElementById('referralKitBody').innerHTML =
+          '<div class="alert alert-warning">データを取得できませんでした</div>';
+        return;
+      }
+      const kit = data.kit;
+      let html = '';
+      if (mode === 'memo') {
+        html = renderMemoHtml(kit);
+        _referralCopyTarget = kit.verbal_memo.points.map(p => '・' + p).join('\n')
+          + '\n\n紹介URL: ' + kit.referral_url;
+      } else if (mode === 'email') {
+        html = renderEmailHtml(kit);
+        _referralCopyTarget = '件名: ' + kit.email_payload.subject + '\n\n' + kit.email_payload.body;
+      }
+      document.getElementById('referralKitBody').innerHTML = html;
+      document.getElementById('referralKitCopyBtn').style.display = '';
+    })
+    .catch(err => {
+      document.getElementById('referralKitBody').innerHTML =
+        '<div class="alert alert-danger">エラー: ' + (err.message || err) + '</div>';
+    });
+}
+
+function renderMemoHtml(kit) {
+  const pts = kit.verbal_memo.points.map(p => '<li class="mb-2">' + escapeHtml(p) + '</li>').join('');
+  return `
+    <div class="mb-3">
+      <div class="small text-muted mb-2">社長との面談中、これを見ながら口頭で説明してください。</div>
+      <ul style="line-height:1.85;padding-left:1.2em;">${pts}</ul>
+    </div>
+    <div class="border-top pt-3 mt-3">
+      <div class="small fw-bold mb-2">紹介先: ${escapeHtml(kit.partner_name)}</div>
+      <div class="d-flex gap-3 align-items-start">
+        <div style="flex:1;">
+          <div class="small text-muted mb-1">紹介URL（その場でメール送信 or QRで読み取らせる）:</div>
+          <div style="background:#f7f7f9;padding:8px 10px;border-radius:4px;font-size:.8rem;word-break:break-all;">${escapeHtml(kit.referral_url)}</div>
+        </div>
+        <div style="text-align:center;">
+          <img src="${escapeHtml(kit.verbal_memo.qr_url)}" alt="QR" style="max-width:140px;border:1px solid #e5e7eb;border-radius:4px;">
+          <div class="small text-muted mt-1">スマホで読取</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderEmailHtml(kit) {
+  return `
+    <div class="mb-3">
+      <div class="small text-muted mb-2">後日メール送信用の文面。「コピー」ボタンでクリップボードへ。</div>
+      <label class="small fw-bold mt-1">件名:</label>
+      <input class="form-control form-control-sm mb-2" readonly value="${escapeHtml(kit.email_payload.subject)}">
+      <label class="small fw-bold">本文:</label>
+      <textarea class="form-control form-control-sm" rows="14" readonly style="font-family:'Hiragino Sans','Yu Gothic',monospace;font-size:.85rem;">${escapeHtml(kit.email_payload.body)}</textarea>
+    </div>
+    <div class="border-top pt-2 small text-muted">
+      紹介先: ${escapeHtml(kit.partner_name)} / URL: ${escapeHtml(kit.referral_url)}
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+document.getElementById('referralKitCopyBtn').addEventListener('click', function(){
+  if (!_referralCopyTarget) return;
+  navigator.clipboard.writeText(_referralCopyTarget).then(() => {
+    const btn = this;
+    const old = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check me-1"></i>コピーしました';
+    setTimeout(() => { btn.innerHTML = old; }, 2000);
+  });
+});
 </script>
 {% endblock %}

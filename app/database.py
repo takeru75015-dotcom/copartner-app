@@ -29,6 +29,10 @@ class Client(Base):
     # 事業構成詳細（社長からのヒアリング情報）
     business_details = Column(Text, default="")
     hearing_answers = Column(Text, default="{}")  # 質問ハッシュ → 回答 のJSON
+    # 🌐 Webサイトから自動取得した事業情報
+    website_url = Column(String, default="")
+    web_extracted_json = Column(Text, default="")  # AIがWebから抽出した構造化情報
+    web_extracted_at = Column(DateTime, nullable=True)  # 取得日時
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User", back_populates="clients")
     financials = relationship("FinancialData", back_populates="client", cascade="all, delete-orphan")

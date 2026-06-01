@@ -11,6 +11,9 @@ const BASE = process.env.COPARTNER_BASE || 'http://127.0.0.1:8000';
 const FD_ID = process.env.COPARTNER_FD_ID;
 const SESSION = process.env.COPARTNER_SESSION;
 const OUTPUT = process.env.COPARTNER_OUTPUT;
+// 紹介PDF等で別ページを PDF 化したい場合に指定
+// (例: /financials/22/referral-kit/1_0?mode=pdf)
+const TARGET_PATH = process.env.COPARTNER_TARGET_PATH || `/financials/${FD_ID}/pdf-view`;
 
 if (!FD_ID || !SESSION || !OUTPUT) {
   console.error('Missing env vars');
@@ -38,10 +41,10 @@ if (!FD_ID || !SESSION || !OUTPUT) {
 
     const page = await ctx.newPage();
 
-    // PDF専用ビュー（社長プレゼン版）にアクセス
-    await page.goto(`${BASE}/financials/${FD_ID}/pdf-view`, {
+    // 対象ページ（デフォルト = 社長プレゼン版PDF、TARGET_PATH指定で紹介PDFなどに切替可）
+    await page.goto(`${BASE}${TARGET_PATH}`, {
       waitUntil: 'domcontentloaded',
-      timeout: 180000,  // 初回はAI生成で60秒以上かかる可能性
+      timeout: 180000,
     });
 
     // print media に切り替え

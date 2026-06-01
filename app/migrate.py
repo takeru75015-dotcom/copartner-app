@@ -19,6 +19,10 @@ def migrate():
     # clients.business_details
     _add_column(cursor, "clients", "business_details", "TEXT DEFAULT ''")
     _add_column(cursor, "clients", "hearing_answers", "TEXT DEFAULT '{}'")
+    # clients.website_url + web_extracted_json + web_extracted_at（HP自動取得機能）
+    _add_column(cursor, "clients", "website_url", "TEXT DEFAULT ''")
+    _add_column(cursor, "clients", "web_extracted_json", "TEXT DEFAULT ''")
+    _add_column(cursor, "clients", "web_extracted_at", "DATETIME")
     # analyses.dismissed_solutions
     _add_column(cursor, "analyses", "dismissed_solutions", "TEXT DEFAULT '[]'")
 

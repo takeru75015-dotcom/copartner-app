@@ -1,7 +1,7 @@
 import json
 import hashlib
 from fastapi import FastAPI, Request, Form, Depends, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -112,13 +112,13 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 # --- クライアント管理 ---
 @app.post("/clients/add")
 def add_client(request: Request, name: str = Form(...), industry: str = Form(""), note: str = Form(""),
-               business_details: str = Form(""),
+               business_details: str = Form(""), website_url: str = Form(""),
                db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=302)
     cl = Client(user_id=user.id, name=name, industry=industry, note=note,
-                business_details=business_details)
+                business_details=business_details, website_url=website_url.strip())
     db.add(cl); db.commit()
     return RedirectResponse("/dashboard", status_code=302)
 
@@ -126,7 +126,7 @@ def add_client(request: Request, name: str = Form(...), industry: str = Form("")
 @app.post("/clients/{client_id}/update")
 def update_client(client_id: int, request: Request,
                   industry: str = Form(""), business_details: str = Form(""),
-                  note: str = Form(""),
+                  note: str = Form(""), website_url: str = Form(""),
                   db: Session = Depends(get_db)):
     """事業構成や業種を更新する（ヒアリング結果を反映する用）"""
     user = get_current_user(request, db)
@@ -139,8 +139,68 @@ def update_client(client_id: int, request: Request,
         cl.industry = industry
     cl.business_details = business_details
     cl.note = note
+    cl.website_url = (website_url or "").strip()
     db.commit()
     return RedirectResponse(f"/clients/{client_id}", status_code=302)
+
+
+@app.post("/clients/{client_id}/extract-website")
+def extract_website_for_client(client_id: int, request: Request,
+                                website_url: str = Form(""),
+                                db: Session = Depends(get_db)):
+    """指定URLからWebサイト情報を取得+AI抽出してClientに保存。
+    UI上で「自動取得」ボタンクリック → このルートが叩かれる。
+    """
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    cl = db.query(Client).filter(Client.id == client_id, Client.user_id == user.id).first()
+    if not cl:
+        return RedirectResponse("/dashboard", status_code=302)
+
+    # URLがフォーム経由で更新されていればまず保存
+    url_to_use = (website_url or "").strip() or (cl.website_url or "")
+    if not url_to_use:
+        return RedirectResponse(f"/clients/{client_id}?web_err=URL未入力", status_code=302)
+    cl.website_url = url_to_use
+
+    from .services.web_extract import extract_from_website
+    try:
+        result = extract_from_website(url_to_use, company_name=cl.name)
+    except Exception as e:
+        return RedirectResponse(f"/clients/{client_id}?web_err={str(e)[:60]}", status_code=302)
+
+    cl.web_extracted_json = json.dumps(result, ensure_ascii=False)
+    from datetime import datetime as _dt
+    cl.web_extracted_at = _dt.utcnow()
+
+    # business_details にプリ入力（既存内容は保持し、AI取得分を追記）
+    ex = (result or {}).get("extracted") or {}
+    if ex and not ex.get("error"):
+        added_lines = []
+        if ex.get("business_summary"):
+            added_lines.append(f"【事業概要】{ex['business_summary']}")
+        if ex.get("main_services"):
+            added_lines.append(f"【主要サービス】{' / '.join(ex['main_services'])}")
+        if ex.get("target_customers"):
+            added_lines.append(f"【主要顧客】{ex['target_customers']}")
+        if ex.get("strengths"):
+            added_lines.append(f"【強み】{' / '.join(ex['strengths'])}")
+        if ex.get("regions"):
+            added_lines.append(f"【対応エリア】{' / '.join(ex['regions'])}")
+        added_text = "\n".join(added_lines)
+        # 既存 business_details の末尾に追加（重複防止のためマーカーで判定）
+        existing = cl.business_details or ""
+        marker = "──Web自動取得──"
+        if marker in existing:
+            # 既存 Web 取得分を削除して上書き
+            existing = existing.split(marker)[0].rstrip()
+        if added_text:
+            sep = "\n\n" if existing else ""
+            cl.business_details = f"{existing}{sep}{marker}\n{added_text}"
+
+    db.commit()
+    return RedirectResponse(f"/clients/{client_id}?web_ok=1", status_code=302)
 
 
 @app.get("/financials/{fd_id}/preview", response_class=HTMLResponse)
@@ -784,7 +844,7 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
 
     # キャッシュ・運転資本指標・EBITDAを template に渡す（キャッシュ診断タブで使用）
     from .services.cash_analysis import compute_burn_rate, compute_working_capital, compute_ebitda, compute_cf_buckets
-    cash_burn = compute_burn_rate(fd)
+    cash_burn = compute_burn_rate(fd, breakdown=breakdown)
     cash_wc = compute_working_capital(fd)
     cash_ebitda = compute_ebitda(fd, breakdown)
     # CF 4バケツ（営業/投資/財務/フリー）
@@ -843,7 +903,16 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
                 hearing_text = "\n".join(lines)
         except Exception:
             pass
-        merged_bd = (base_bd + hearing_text).strip()
+        # Web自動取得した事業情報も business_context に注入
+        web_text = ""
+        try:
+            web_json = json.loads(getattr(cl, "web_extracted_json", "") or "{}")
+            if web_json:
+                from .services.web_extract import format_for_business_context
+                web_text = format_for_business_context(web_json)
+        except Exception:
+            pass
+        merged_bd = (base_bd + hearing_text + web_text).strip()
 
         # 税理士の除外カテゴリ設定を読み込み
         try:
@@ -1028,17 +1097,69 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
             db.commit()
         except Exception as e:
             print(f"[pdf_view] narrative generation failed: {e}")
+            # 新構造のキー（section1-6）に合わせたフォールバック。
+            # AI生成失敗時でも既存の分析結果から最低限の内容を出す。
+            owner_msg = result.get("owner_message", "") or result.get("summary", "")
+            strengths_src = result.get("strengths") or []
+            issues_src = (filtered_result.get("prioritized_problems") or result.get("prioritized_problems") or [])
+
             pdf_content = {
-                "cover_subtitle": "経営分析レポート",
-                "narrative_intro": result.get("owner_message", "") or result.get("summary", ""),
-                "narrative_situation": result.get("summary", ""),
-                "narrative_issues": "",
-                "narrative_proposal": result.get("owner_what_to_do", ""),
-                "narrative_outlook": "",
-                "narrative_strengths": "",
-                "key_numbers": [],
-                "next_actions": [],
-                "closing": "",
+                "cover_subtitle": (result.get("key_insight") or "経営分析レポート")[:60],
+                "section1_performance": {
+                    "headline": result.get("key_insight", "") or owner_msg[:80],
+                    "summary_text": result.get("summary", "") or owner_msg,
+                    "trend_comment": "",
+                },
+                "section2_strengths": {
+                    "headline": "御社の強み" if strengths_src else "",
+                    "strengths_list": [
+                        {"title": s if isinstance(s, str) else str(s)[:40], "evidence": "", "implication": ""}
+                        for s in strengths_src[:5]
+                    ],
+                },
+                "section3_issues": {
+                    "headline": "取り組むべき課題",
+                    "issues": [
+                        {
+                            "rank": p.get("rank", i + 1),
+                            "title": p.get("title", ""),
+                            "fact": p.get("detail", ""),
+                            "causal": "",
+                            "implication": p.get("expected_outcome", ""),
+                        }
+                        for i, p in enumerate(issues_src[:3])
+                    ],
+                },
+                "section4_proposals_per_issue": [
+                    {
+                        "issue_rank": p.get("rank", i + 1),
+                        "issue_title": p.get("title", ""),
+                        "intro": "",
+                        "solutions": [
+                            {
+                                "title": s.get("title", ""),
+                                "expected_effect": (
+                                    f"+{s.get('impact_min', 0):,.0f}〜{s.get('impact_max', 0):,.0f}万円"
+                                    if s.get("impact_min") is not None and s.get("impact_max") is not None
+                                    else "—"
+                                ),
+                                "cost": "—",
+                                "timeframe": s.get("timeframe", "—"),
+                                "first_step": s.get("first_step", ""),
+                                "why": s.get("why", ""),
+                            }
+                            for s in (p.get("solutions") or [])
+                        ],
+                    }
+                    for i, p in enumerate(issues_src[:3])
+                ],
+                "section5_tax_proposals": {"applicable": False, "proposals": []},
+                "section6_conclusion": {
+                    "headline": "",
+                    "positive_summary": "",
+                    "next_steps_summary": result.get("owner_what_to_do", ""),
+                    "closing_message": "本レポートはAI生成が失敗したため、既存分析結果からの簡易版です。「再分析」後に再度PDF出力を試してください。",
+                },
             }
 
     # cash_burn/wc/ebitda/cf もテンプレに必要
@@ -1047,7 +1168,7 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
         breakdown = json.loads(fd.breakdown_json or "{}")
     except Exception:
         breakdown = {}
-    cash_burn = compute_burn_rate(fd)
+    cash_burn = compute_burn_rate(fd, breakdown=breakdown)
     cash_wc = compute_working_capital(fd)
     cash_ebitda = compute_ebitda(fd, breakdown)
     _all_fds_for_cf = db.query(FinancialData).join(Client).filter(Client.id == fd.client_id).all()
@@ -1066,6 +1187,146 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
         "cash_cf": cash_cf,
         "user": user,
     })
+
+
+def _find_solution_by_id(result: dict, sol_id: str):
+    """sol_id ('rank_idx' 形式) から solution dict を取り出す"""
+    if not sol_id or "_" not in sol_id:
+        return None
+    try:
+        rank_s, idx_s = sol_id.split("_", 1)
+        target_rank = int(rank_s)
+        idx = int(idx_s)
+    except Exception:
+        return None
+    for p in (result.get("prioritized_problems") or []):
+        if p.get("rank") == target_rank:
+            sols = p.get("solutions") or []
+            if 0 <= idx < len(sols):
+                return sols[idx]
+    return None
+
+
+@app.get("/financials/{fd_id}/referral-kit/{sol_id}", response_class=HTMLResponse)
+def referral_kit_page(fd_id: int, sol_id: str, request: Request,
+                      mode: str = "memo",  # 'memo' / 'email' / 'pdf'
+                      db: Session = Depends(get_db)):
+    """採択された solution に対する紹介キット（口頭メモ/メール/PDF）を返す"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return RedirectResponse("/dashboard", status_code=302)
+    cl = db.query(Client).filter(Client.id == fd.client_id).first()
+
+    analysis = db.query(Analysis).filter(
+        Analysis.financial_data_id == fd_id
+    ).order_by(Analysis.created_at.desc()).first()
+    if not analysis:
+        return HTMLResponse("分析結果がまだありません", status_code=404)
+
+    result = json.loads(analysis.result_json)
+    sol = _find_solution_by_id(result, sol_id)
+    if not sol:
+        return HTMLResponse(f"指定された提案が見つかりません (sol_id={sol_id})", status_code=404)
+
+    # 税理士事務所名は user.display_name を流用（暫定）
+    tax_office_name = getattr(user, "display_name", "") or user.username
+    tax_ref_code = getattr(user, "referral_code", "") or f"tax_{user.id:03d}"
+    base_url = str(request.base_url).rstrip("/")
+
+    from .services.referral_kit import build_referral_kit
+    kit = build_referral_kit(
+        solution=sol,
+        client_name=cl.name,
+        tax_office_name=tax_office_name,
+        fd_id=fd_id,
+        client_id=cl.id,
+        base_url=base_url,
+        tax_referral_code=tax_ref_code,
+    )
+
+    # mode=pdf なら紹介PDF（A4縦1ページ）を返す
+    if mode == "pdf":
+        return templates.TemplateResponse("referral_pdf.html", {
+            "request": request,
+            "kit": kit,
+            "client": cl,
+            "user": user,
+        })
+
+    # memo / email は JSON フラグメントで返す（フロントでモーダル表示）
+    return JSONResponse({
+        "ok": True,
+        "sol_title": sol.get("title", ""),
+        "kit": kit,
+    })
+
+
+@app.get("/financials/{fd_id}/referral-pdf-download/{sol_id}")
+def referral_pdf_download(fd_id: int, sol_id: str, request: Request,
+                          db: Session = Depends(get_db)):
+    """紹介PDF（手渡し用）を Playwright で PDF 化してダウンロード"""
+    from fastapi.responses import Response
+    from .services.pdf_export import generate_pdf_for_fd
+
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return RedirectResponse("/dashboard", status_code=302)
+    cl = db.query(Client).filter(Client.id == fd.client_id).first()
+
+    session_value = request.cookies.get("session", "")
+    if not session_value:
+        return RedirectResponse("/login", status_code=302)
+
+    base_url = str(request.base_url).rstrip("/")
+
+    # 紹介PDF用の専用エンドポイントを開かせる（既存 generate_pdf_for_fd は固定URL前提のため、
+    # 簡易的に Playwright を別経路で叩く実装にする）
+    import subprocess, tempfile, os
+    from pathlib import Path
+
+    SCRIPT_DIR = Path(__file__).parent.parent
+    node_script = SCRIPT_DIR / "pdf_export.js"
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        pdf_path = tmp.name
+    try:
+        env = os.environ.copy()
+        env["COPARTNER_BASE"] = base_url
+        env["COPARTNER_FD_ID"] = str(fd_id)
+        env["COPARTNER_SESSION"] = session_value
+        env["COPARTNER_OUTPUT"] = pdf_path
+        env["COPARTNER_TARGET_PATH"] = f"/financials/{fd_id}/referral-kit/{sol_id}?mode=pdf"
+        try:
+            result = subprocess.run(
+                ["node", str(node_script)],
+                cwd=str(SCRIPT_DIR), env=env,
+                capture_output=True, text=False, timeout=180,
+            )
+        except Exception as e:
+            return RedirectResponse(f"/financials/{fd_id}/analyze?err=referral_pdf:{str(e)[:40]}", status_code=302)
+        if result.returncode != 0 or not os.path.exists(pdf_path) or os.path.getsize(pdf_path) == 0:
+            return RedirectResponse(f"/financials/{fd_id}/analyze?err=referral_pdf_failed", status_code=302)
+        with open(pdf_path, "rb") as f:
+            data = f.read()
+    finally:
+        try: os.unlink(pdf_path)
+        except Exception: pass
+
+    filename = f"{cl.name}_紹介資料_{sol_id}.pdf".replace("/", "_")
+    filename_enc = quote(filename, safe="")
+    return Response(
+        content=data, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=referral.pdf; filename*=UTF-8''{filename_enc}"},
+    )
 
 
 @app.get("/financials/{fd_id}/pdf")
@@ -1091,8 +1352,16 @@ def export_pdf(fd_id: int, request: Request, db: Session = Depends(get_db)):
     if not session_value:
         return RedirectResponse(f"/financials/{fd_id}/analyze?err=session", status_code=302)
 
-    # PDF生成（Playwright）
-    pdf_bytes = generate_pdf_for_fd(fd_id, session_value, base_url="http://127.0.0.1:8000")
+    # PDF生成（Playwright）— base_url は受信リクエストから動的に決める
+    # （本番デプロイ・Docker・プロキシ経由でも動くように）
+    base_url = str(request.base_url).rstrip("/")
+    try:
+        pdf_bytes = generate_pdf_for_fd(fd_id, session_value, base_url=base_url)
+    except Exception as e:
+        # subprocess の異常終了等は generate_pdf_for_fd 内で握り潰すが、
+        # 想定外の例外（PermissionError 等）でも 500 にせず redirect で返す
+        print(f"[export_pdf] failed for fd={fd_id}: {e}")
+        return RedirectResponse(f"/financials/{fd_id}/analyze?err=pdf", status_code=302)
     if not pdf_bytes:
         return RedirectResponse(f"/financials/{fd_id}/analyze?err=pdf", status_code=302)
 

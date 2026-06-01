@@ -39,20 +39,71 @@
           </div>
           <div class="col-12">
             <label class="form-label small fw-semibold">
+              <i class="fas fa-globe me-1 text-primary"></i>ホームページ URL
+              <span class="text-muted fw-normal">（入力後「自動取得」ボタンで事業情報をAIが取得）</span>
+            </label>
+            <div class="d-flex gap-2">
+              <input type="url" name="website_url" id="website_url_input"
+                     class="form-control form-control-sm"
+                     value="{{ client.website_url or '' }}"
+                     placeholder="https://example.co.jp">
+            </div>
+            {% if client.web_extracted_at %}
+            <div class="small text-success mt-1">
+              <i class="fas fa-check-circle me-1"></i>最終取得: {{ client.web_extracted_at.strftime('%Y-%m-%d %H:%M') if client.web_extracted_at else '' }}
+            </div>
+            {% endif %}
+            {% if request.query_params.get('web_ok') %}
+            <div class="alert alert-success py-2 px-3 small mt-2 mb-0">
+              <i class="fas fa-check-circle me-1"></i>HPから事業情報を取得しました。事業構成欄に自動反映されています。
+            </div>
+            {% elif request.query_params.get('web_err') %}
+            <div class="alert alert-warning py-2 px-3 small mt-2 mb-0">
+              <i class="fas fa-exclamation-triangle me-1"></i>取得失敗: {{ request.query_params.get('web_err') }}
+            </div>
+            {% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold">
               事業構成の詳細
               <span class="text-muted fw-normal">（社長にヒアリングした内容。売上構成・主要取引先・業態の特徴など）</span>
             </label>
-            <textarea name="business_details" class="form-control form-control-sm" rows="4"
+            <textarea name="business_details" class="form-control form-control-sm" rows="6"
               placeholder="例:&#10;- 売上の70%が卸売（飲食店向け食材）、30%がEC直販（個人向けギフト）&#10;- 主要仕入先は3社（国産コーヒー豆）&#10;- 顧客数：法人80社、個人約2,000人">{{ client.business_details or '' }}</textarea>
           </div>
         </div>
-        <div class="mt-2">
+        <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
           <button type="submit" class="btn btn-primary btn-sm" style="background:#1a237e;border-color:#1a237e;">
             <i class="fas fa-save me-1"></i>保存
           </button>
-          <span class="small text-muted ms-2">保存後、AI分析の精度が上がります</span>
+          <span class="small text-muted">保存後、AI分析の精度が上がります</span>
         </div>
       </form>
+
+      <!-- 別フォーム: URL自動取得 -->
+      <form method="post" action="/clients/{{ client.id }}/extract-website" class="mt-3 border-top pt-3"
+            onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('.fetch-spinner').classList.remove('d-none');">
+        <input type="hidden" name="website_url" id="website_url_for_fetch">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <button type="submit" class="btn btn-outline-primary btn-sm" id="fetch_web_btn">
+            <i class="fas fa-globe me-1"></i>URL から事業情報を自動取得
+            <span class="spinner-border spinner-border-sm ms-2 fetch-spinner d-none" role="status"></span>
+          </button>
+          <span class="small text-muted">10-30秒かかります（HP取得＋AI抽出）</span>
+        </div>
+      </form>
+      <script>
+        // URL入力欄から hidden に同期
+        (function(){
+          var src = document.getElementById('website_url_input');
+          var dst = document.getElementById('website_url_for_fetch');
+          if(src && dst){
+            var sync = function(){ dst.value = src.value; };
+            src.addEventListener('input', sync);
+            sync();
+          }
+        })();
+      </script>
 
       <div class="border-top pt-3 mt-3">
         <div class="small fw-semibold mb-2"><i class="fas fa-file-upload me-1 text-primary"></i>補足資料 PDF / 画像 をアップロード（会社概要・事業計画・KPI・<strong>顧客別売上</strong>・<strong>商品別売上</strong> 等）</div>

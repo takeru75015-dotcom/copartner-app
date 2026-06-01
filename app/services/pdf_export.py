@@ -38,17 +38,32 @@ def generate_pdf_for_fd(fd_id: int, session_cookie: str, base_url: str = "http:/
         env["COPARTNER_SESSION"] = session_cookie
         env["COPARTNER_OUTPUT"] = pdf_path
 
-        result = subprocess.run(
-            ["node", str(node_script)],
-            cwd=str(SCRIPT_DIR),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=120,  # 2分タイムアウト
-        )
+        try:
+            # text=True だと Windows のロケール(cp932)で stdout/stderr を decode しようとして
+            # 日本語/絵文字を含む Node エラーで UnicodeDecodeError を吐く → result.stderr が None になる。
+            # bytes で受けて utf-8 + errors='replace' で安全に decode する。
+            result = subprocess.run(
+                ["node", str(node_script)],
+                cwd=str(SCRIPT_DIR),
+                env=env,
+                capture_output=True,
+                text=False,
+                timeout=300,  # 5分（AI生成 + レート制限リトライ最悪値を見越して）
+            )
+        except subprocess.TimeoutExpired as e:
+            print(f"[pdf_export] timeout after {e.timeout}s")
+            return None
+        except FileNotFoundError as e:
+            # node コマンドが見つからない
+            print(f"[pdf_export] node not found: {e}")
+            return None
+        except Exception as e:
+            print(f"[pdf_export] subprocess failed: {e}")
+            return None
 
         if result.returncode != 0:
-            print(f"[pdf_export] error: {result.stderr[:500]}")
+            stderr_text = (result.stderr or b"").decode("utf-8", errors="replace")
+            print(f"[pdf_export] error rc={result.returncode}: {stderr_text[:1000]}")
             return None
 
         if not os.path.exists(pdf_path) or os.path.getsize(pdf_path) == 0:

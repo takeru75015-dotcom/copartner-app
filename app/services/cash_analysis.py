@@ -201,19 +201,25 @@ def compute_ebitda(fd, breakdown: Dict = None) -> Dict:
     return result
 
 
-def compute_burn_rate(fd) -> Dict:
+def compute_burn_rate(fd, breakdown: Dict = None) -> Dict:
     """
     バーンレート関連指標を計算。
       - 月次営業利益／損失
+      - 月次営業CF（≒ 営業利益 + 減価償却費）★ 真のキャッシュ創出力
       - 推定月次借入返済（有利子負債 ÷ 10年返済と仮定）
-      - 実質バーン／月
+      - 実質バーン／月（営業CF - 返済）
       - 黒字化に必要な年間改善額
       - 資金ショートまでの月数（runway）
+
+    🚨 修正前は real_burn = 営業利益 - 返済 だったが、減価償却を加算しないと
+    「黒字なのにキャッシュアウト」と誤判定する（運輸・製造業に多い）。
     """
     result = {
         "operating_monthly": None,
         "debt_repayment_monthly_est": None,
         "real_burn_monthly": None,
+        "operating_cf_monthly": None,
+        "depreciation_monthly": None,
         "breakeven_required_yearly": None,
         "runway_months": None,
         "is_burning": False,
@@ -227,14 +233,37 @@ def compute_burn_rate(fd) -> Dict:
     op_monthly = round(op / 12, 1)
     result["operating_monthly"] = op_monthly
 
+    # 減価償却（販管費明細から拾う。なければ ebitda 算出のために 0 のまま）
+    depreciation = 0
+    if breakdown:
+        se = (breakdown.get("selling_expenses_detail") or {})
+        for k, v in se.items():
+            if not isinstance(v, (int, float)) or k.startswith("__"):
+                continue
+            if any(kw in k for kw in ["減価償却", "償却費"]):
+                depreciation += v
+        # 売上原価側にもあれば（製造業）
+        cos = (breakdown.get("cost_of_sales_detail") or {})
+        for k, v in cos.items():
+            if not isinstance(v, (int, float)) or k.startswith("__"):
+                continue
+            if any(kw in k for kw in ["減価償却", "償却費"]):
+                depreciation += v
+    dep_monthly = round(depreciation / 12, 1) if depreciation else 0
+    result["depreciation_monthly"] = dep_monthly
+
+    # 月次営業CF（簡易EBITDA ベース）＝ 営業利益 + 減価償却
+    op_cf_monthly = round(op_monthly + dep_monthly, 1)
+    result["operating_cf_monthly"] = op_cf_monthly
+
     # 推定月次返済額（長期借入=10年想定の粗推定）
     if debt > 0:
         result["debt_repayment_monthly_est"] = round(debt / 10 / 12, 1)
 
-    # 実質バーン（営業損益 - 返済）
-    real_burn = op_monthly
+    # 実質バーン（営業CF - 返済）★ 修正：減価償却込み
+    real_burn = op_cf_monthly
     if result["debt_repayment_monthly_est"]:
-        real_burn = op_monthly - result["debt_repayment_monthly_est"]
+        real_burn = op_cf_monthly - result["debt_repayment_monthly_est"]
     result["real_burn_monthly"] = round(real_burn, 1)
 
     # 黒字化に必要な年間改善
@@ -244,7 +273,7 @@ def compute_burn_rate(fd) -> Dict:
     if real_burn < 0:
         result["repayment_covered_yearly_gap"] = round(-real_burn * 12, 1)
 
-    # Runway
+    # Runway（real_burn が負＝キャッシュアウト時のみ）
     if real_burn < 0 and cash > 0:
         result["runway_months"] = round(cash / (-real_burn), 1)
 

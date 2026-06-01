@@ -17,7 +17,7 @@
   body > .container { padding: 0 !important; }
   .pdfv { width: 100%; max-width: 100%; margin: 0; padding: 0; }
   .pdfv h1, .pdfv h2, .pdfv h3 { color: var(--rk-black); font-weight: 800; letter-spacing: 0.02em; }
-  .pdfv p { line-height: 1.75; font-size: 13px; }
+  .pdfv p { line-height: 1.75; font-size: 14px; }
 
   /* 表紙 — A4縦サイズに合わせて全面塗りつぶし */
   .pdf-cover { background: var(--rk-black); color: #fff; padding: 90px 60px; border-radius: 0; width: 100%; min-height: 950px; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; }
@@ -37,7 +37,7 @@
   .pdf-section-title .bar { width: 5px; height: 28px; background: var(--rk-accent); }
   .pdf-section-title .num { background: var(--rk-accent); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 700; min-width: 36px; text-align: center; }
   .pdf-section-title h2 { font-size: 22px; margin: 0; }
-  .pdf-section-headline { font-size: 16px; font-weight: 700; color: var(--rk-black); margin-bottom: 16px; padding: 12px 18px; background: var(--rk-bg-alt); border-left: 4px solid var(--rk-accent); }
+  .pdf-section-headline { font-size: 17px; font-weight: 700; color: var(--rk-black); margin-bottom: 16px; padding: 12px 18px; background: var(--rk-bg-alt); border-left: 4px solid var(--rk-accent); }
 
   /* KPI数字行 */
   .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 20px 0; }
@@ -50,50 +50,60 @@
 
   /* 強み */
   .strength-block { background: var(--rk-bg-alt); border-left: 4px solid #16a34a; border-radius: 6px; padding: 16px 22px; margin-bottom: 10px; }
-  .strength-block .title { font-size: 14px; font-weight: 800; color: var(--rk-black); margin-bottom: 4px; }
-  .strength-block .evidence { font-size: 13px; color: var(--rk-black); margin-bottom: 4px; }
-  .strength-block .implication { font-size: 12px; color: var(--rk-text-muted); line-height: 1.6; }
+  .strength-block .title { font-size: 15px; font-weight: 800; color: var(--rk-black); margin-bottom: 4px; }
+  .strength-block .evidence { font-size: 14px; color: var(--rk-black); margin-bottom: 4px; }
+  .strength-block .implication { font-size: 13px; color: var(--rk-text-muted); line-height: 1.6; }
 
   /* 課題 */
   .issue-card { background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid var(--rk-accent); border-radius: 6px; padding: 18px 22px; margin-bottom: 12px; }
   .issue-card .rank { display: inline-block; background: var(--rk-accent); color: #fff; padding: 2px 8px; font-size: 11px; font-weight: 700; border-radius: 3px; margin-right: 8px; }
-  .issue-card .title { font-size: 15px; font-weight: 800; color: var(--rk-black); display: inline; }
+  .issue-card .title { font-size: 16px; font-weight: 800; color: var(--rk-black); display: inline; }
   .issue-card .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 12px; }
   .issue-card .row3 .col { background: var(--rk-bg-alt); padding: 10px 12px; border-radius: 4px; }
-  .issue-card .row3 .col .col-label { font-size: 10px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .05em; margin-bottom: 4px; }
-  .issue-card .row3 .col .col-text { font-size: 12px; color: var(--rk-black); line-height: 1.65; }
+  .issue-card .row3 .col .col-label { font-size: 11px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .05em; margin-bottom: 4px; }
+  .issue-card .row3 .col .col-text { font-size: 13px; color: var(--rk-black); line-height: 1.65; }
 
   /* 提案セクション */
   .proposal-issue-header { background: var(--rk-black); color: #fff; padding: 12px 18px; border-radius: 6px 6px 0 0; }
   .proposal-issue-header .label { font-size: 11px; color: #94a3b8; font-weight: 700; }
   .proposal-issue-header .title { font-size: 16px; font-weight: 800; }
-  .proposal-issue-intro { background: var(--rk-bg-alt); padding: 10px 18px; font-size: 13px; color: var(--rk-text-muted); border-left: 4px solid var(--rk-black); margin-bottom: 12px; }
+  .proposal-issue-intro { background: var(--rk-bg-alt); padding: 10px 18px; font-size: 14px; color: var(--rk-text-muted); border-left: 4px solid var(--rk-black); margin-bottom: 12px; }
   .solution-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
   .solution-card { background: #fff; border: 1px solid var(--rk-border); border-radius: 6px; padding: 16px 20px; }
-  .solution-card .title { font-size: 14px; font-weight: 800; color: var(--rk-black); margin-bottom: 8px; }
+  .solution-card .title { font-size: 15px; font-weight: 800; color: var(--rk-black); margin-bottom: 8px; }
   .solution-card .meta-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 10px 0; }
   .solution-card .meta-cell { background: var(--rk-bg-alt); padding: 8px 10px; border-radius: 4px; }
-  .solution-card .meta-label { font-size: 10px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .03em; }
-  .solution-card .meta-value { font-size: 13px; font-weight: 700; color: var(--rk-black); margin-top: 2px; }
+  .solution-card .meta-label { font-size: 11px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .03em; }
+  .solution-card .meta-value { font-size: 14px; font-weight: 700; color: var(--rk-black); margin-top: 2px; }
   .solution-card .meta-value.effect { color: #16a34a; }
-  .solution-card .first-step, .solution-card .why { font-size: 11px; color: var(--rk-text-muted); line-height: 1.6; margin-top: 6px; }
+  .solution-card .first-step, .solution-card .why { font-size: 12px; color: var(--rk-text-muted); line-height: 1.6; margin-top: 6px; }
   .solution-card .first-step strong, .solution-card .why strong { color: var(--rk-black); }
 
   /* 節税 */
   .tax-card { background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid #16a34a; border-radius: 6px; padding: 14px 18px; margin-bottom: 10px; }
-  .tax-card .title { font-size: 14px; font-weight: 800; color: var(--rk-black); margin-bottom: 4px; }
-  .tax-card .row3 { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px; margin-top: 8px; font-size: 11px; }
+  .tax-card .title { font-size: 15px; font-weight: 800; color: var(--rk-black); margin-bottom: 4px; }
+  .tax-card .row3 { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px; margin-top: 8px; font-size: 12px; }
   .tax-card .row3 .label { color: var(--rk-text-muted); font-weight: 700; }
   .tax-card .row3 .value { color: var(--rk-black); font-weight: 700; }
+
+  /* 補助金カード */
+  .subsidy-card { background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid #2563eb; border-radius: 6px; padding: 14px 18px; margin-bottom: 10px; }
+  .subsidy-card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .subsidy-card .name { font-size: 15px; font-weight: 800; color: var(--rk-black); }
+  .subsidy-card .cat { background: #2563eb; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 3px; letter-spacing: .05em; }
+  .subsidy-card .amount { font-size: 14px; font-weight: 800; color: #2563eb; }
+  .subsidy-card .meta { font-size: 11px; color: var(--rk-text-muted); margin-bottom: 6px; }
+  .subsidy-card .purpose { font-size: 13px; color: var(--rk-black); line-height: 1.65; margin-bottom: 6px; }
+  .subsidy-card .reasons { font-size: 12px; color: #1e40af; background: #eff6ff; padding: 6px 10px; border-radius: 3px; }
 
   /* まとめ */
   .conclusion-block { background: #fff; border: 1px solid var(--rk-border); border-radius: 8px; padding: 24px 28px; margin-bottom: 14px; }
   .conclusion-block.positive { border-left: 4px solid #16a34a; }
   .conclusion-block.next { border-left: 4px solid var(--rk-accent); }
-  .conclusion-block .label { font-size: 12px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .05em; margin-bottom: 6px; }
-  .conclusion-block .text { font-size: 14px; line-height: 1.85; color: var(--rk-black); }
+  .conclusion-block .label { font-size: 13px; color: var(--rk-text-muted); font-weight: 700; letter-spacing: .05em; margin-bottom: 6px; }
+  .conclusion-block .text { font-size: 15px; line-height: 1.85; color: var(--rk-black); }
 
-  .pdf-closing { background: var(--rk-black); color: #fff; padding: 28px 36px; border-radius: 0; margin-top: 36px; font-size: 14px; line-height: 1.85; text-align: center; }
+  .pdf-closing { background: var(--rk-black); color: #fff; padding: 28px 36px; border-radius: 0; margin-top: 36px; font-size: 15px; line-height: 1.85; text-align: center; }
 
   @media print {
     .navbar, .alert, button, a.btn { display: none !important; }
@@ -338,10 +348,51 @@
   </div>
   {% endif %}
 
+  {# ========== 提案可能 補助金 ========== #}
+  {% set subsidy_items = (result.subsidies["items"] if (result and result.subsidies and result.subsidies["items"]) else []) %}
+  {% if subsidy_items %}
+  {% set sub_num = 4 + ((pdf_content.section4_proposals_per_issue or [])|length) + (1 if (pdf_content.section5_tax_proposals and pdf_content.section5_tax_proposals.applicable and pdf_content.section5_tax_proposals.proposals) else 0) + 1 %}
+  <div class="pdf-section">
+    <div class="pdf-section-title">
+      <span class="bar"></span>
+      <span class="num">{{ "%02d"|format(sub_num) }}</span>
+      <h2>提案可能 補助金・助成金</h2>
+    </div>
+    <div class="pdf-section-headline">
+      御社の事業構成・経営課題から、申請できる可能性のある補助金・助成金 {{ subsidy_items|length }}件をご紹介します。
+    </div>
+    {% for sub in subsidy_items[:6] %}
+    <div class="subsidy-card">
+      <div class="head">
+        <div>
+          <span class="cat">{{ sub.category or '補助金' }}</span>
+          <span class="name">{{ sub.name }}</span>
+        </div>
+        <div class="amount">{{ sub.amount_max_label or '' }}</div>
+      </div>
+      <div class="meta">
+        {% if sub.issuer %}{{ sub.issuer }}{% endif %}
+        {% if sub.subsidy_rate %} / 補助率 {{ sub.subsidy_rate }}{% endif %}
+        {% if sub.target_size and sub.target_size.max_employees %} / 対象 {{ sub.target_size.max_employees }}名以下{% endif %}
+      </div>
+      {% if sub.purpose %}
+      <div class="purpose">{{ sub.purpose }}</div>
+      {% endif %}
+      {% if sub.match_reasons %}
+      <div class="reasons">
+        💡 該当理由: {{ sub.match_reasons|join(' / ') }}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {# ========== 最終 まとめ ========== #}
   {% if pdf_content.section6_conclusion %}
   {% set s6 = pdf_content.section6_conclusion %}
-  {% set conc_num = 4 + ((pdf_content.section4_proposals_per_issue or [])|length) + (1 if (pdf_content.section5_tax_proposals and pdf_content.section5_tax_proposals.applicable and pdf_content.section5_tax_proposals.proposals) else 0) %}
+  {% set _subsidy_offset = 1 if subsidy_items else 0 %}
+  {% set conc_num = 4 + ((pdf_content.section4_proposals_per_issue or [])|length) + (1 if (pdf_content.section5_tax_proposals and pdf_content.section5_tax_proposals.applicable and pdf_content.section5_tax_proposals.proposals) else 0) + _subsidy_offset %}
   <div class="pdf-section">
     <div class="pdf-section-title">
       <span class="bar"></span>
