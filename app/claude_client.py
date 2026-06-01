@@ -1228,33 +1228,60 @@ def analyze_financials(fd: FinancialData, client_name: str, industry: str,
     historical_data: 同じクライアントの他期の FinancialData リスト（トレンド分析用）
     referral_code: アフィリンクに埋め込む税理士の紹介ID
     """
-    # ★ BS抽出ミス自動補正（DBの current_liabilities が内訳合計と大きく乖離してたら内訳優先）
-    # 例：DBに「流動負債 4.29億円」と入っているが、内訳合計が7,453万円のケース。
-    # この場合 DB の値は誤抽出（固定負債や総負債を取り違えた）と判断し、内訳合計で上書き。
+    # ★ BS抽出ミス自動補正（三角測量で安全な場合のみ上書き）
+    # 単純な「DB値 vs 内訳合計」比較は危険（内訳に重複がある場合誤補正する）。
+    # 「DB + 別カラム = 総額」と「内訳合計 + 別カラム = 総額」のどちらが整合するかで判定。
     try:
         _bd = json.loads(getattr(fd, "breakdown_json", "{}") or "{}")
-        _cl_detail = (_bd.get("current_liabilities_detail") or {})
-        _cl_sum = sum(v for k, v in _cl_detail.items()
-                      if not k.startswith("__") and isinstance(v, (int, float)) and v != 0)
+
+        def _sum_detail(key: str) -> float:
+            d = _bd.get(key) or {}
+            return sum(v for k, v in d.items()
+                       if not k.startswith("__") and isinstance(v, (int, float)) and v != 0)
+
+        _cl_sum = _sum_detail("current_liabilities_detail")
+        _ca_sum = _sum_detail("current_assets_detail")
+        _fl_sum = _sum_detail("fixed_liabilities_detail")
+        _fa_sum = _sum_detail("fixed_assets_detail")
         _cl_db = getattr(fd, "current_liabilities", 0) or 0
-        if _cl_sum > 0 and _cl_db > 0:
-            ratio = abs(_cl_db - _cl_sum) / max(_cl_db, _cl_sum)
-            if ratio > 0.20:
-                # 20%以上ズレてたら内訳合計を採用（in-memory のみ、DB は変えない）
-                print(f"[BS補正] fd_{fd.id} current_liabilities: DB={_cl_db:,.0f} → 内訳合計={_cl_sum:,.0f}", flush=True)
-                fd.current_liabilities = _cl_sum
-        # 固定負債も同様に内訳から計算（DB列がなくても）
-        _fl_detail = (_bd.get("fixed_liabilities_detail") or {})
-        _fl_sum = sum(v for k, v in _fl_detail.items()
-                      if not k.startswith("__") and isinstance(v, (int, float)) and v != 0)
-        # 総負債と内訳合計のズレもチェック
+        _ca_db = getattr(fd, "current_assets", 0) or 0
         _tl = getattr(fd, "total_liabilities", 0) or 0
+        _ta = getattr(fd, "total_assets", 0) or 0
+
+        # --- 流動負債の三角測量補正 ---
+        # 候補1: cl_db + fl_sum vs total_liabilities
+        # 候補2: cl_sum + fl_sum vs total_liabilities
+        # より整合する方を採用
+        if _tl > 0 and _fl_sum > 0 and _cl_sum > 0 and _cl_db > 0:
+            err_db = abs(_cl_db + _fl_sum - _tl)
+            err_sum = abs(_cl_sum + _fl_sum - _tl)
+            # 内訳合計版の誤差が DB版より大幅に小さい場合のみ上書き（DB値が固定負債と誤分類されてるケース）
+            if err_sum < err_db and err_db > _tl * 0.20:
+                print(f"[BS補正] fd_{fd.id} current_liabilities: DB={_cl_db:,.0f} → 内訳合計={_cl_sum:,.0f}（総負債との整合で内訳が正）", flush=True)
+                fd.current_liabilities = _cl_sum
+
+        # --- 流動資産の三角測量補正 ---
+        if _ta > 0 and _fa_sum > 0 and _ca_sum > 0 and _ca_db > 0:
+            err_db = abs(_ca_db + _fa_sum - _ta)
+            err_sum = abs(_ca_sum + _fa_sum - _ta)
+            if err_sum < err_db and err_db > _ta * 0.20:
+                print(f"[BS補正] fd_{fd.id} current_assets: DB={_ca_db:,.0f} → 内訳合計={_ca_sum:,.0f}（総資産との整合で内訳が正）", flush=True)
+                fd.current_assets = _ca_sum
+            elif err_db < err_sum and err_sum > _ta * 0.20:
+                # DBが正で内訳に重複あり → 警告のみ（AI に伝えて、AI が分析時に内訳を慎重に扱う）
+                print(f"[BS警告] fd_{fd.id} current_assets_detail に重複の可能性: DB={_ca_db:,.0f} / 内訳合計={_ca_sum:,.0f}（DBが正）", flush=True)
+
+        # --- 総負債の整合チェック ---
         if _cl_sum > 0 and _fl_sum > 0 and _tl > 0:
             _calc = _cl_sum + _fl_sum
             if abs(_calc - _tl) / max(_tl, _calc) > 0.10:
-                # 内訳合計が信用できそうなら総負債も補正
-                fd.total_liabilities = _calc
-                print(f"[BS補正] fd_{fd.id} total_liabilities: DB={_tl:,.0f} → 流動+固定={_calc:,.0f}", flush=True)
+                print(f"[BS警告] fd_{fd.id} total_liabilities: DB={_tl:,.0f} vs 流動+固定内訳={_calc:,.0f}（乖離あり）", flush=True)
+
+        # --- 総資産の整合チェック ---
+        if _ca_sum > 0 and _fa_sum > 0 and _ta > 0:
+            _calc_ta = _ca_sum + _fa_sum
+            if abs(_calc_ta - _ta) / max(_ta, _calc_ta) > 0.15:
+                print(f"[BS警告] fd_{fd.id} total_assets: DB={_ta:,.0f} vs 流動+固定内訳={_calc_ta:,.0f}（乖離あり）", flush=True)
     except Exception as _e:
         pass
 
@@ -1848,9 +1875,8 @@ def analyze_financials(fd: FinancialData, client_name: str, industry: str,
    個別の数値の高低ではなく、「前期比でどう動いたか」「絶対水準として健全か」「内訳がどう変化したか」「現金がどう動いたか」から課題を発見する。
    数字が動いた → その裏で何が起きているか → 何が課題で、どう手を打つか、の順で考える。
 
-⚠️ **業界比較は使わない**（精度が低いため）
-   benchmark データが渡されても、社長向け出力（key_insight / summary / strengths / issues / owner_message / detail）では業界平均との比較は引用しない。代わりに「社内の前期比・推移」「絶対水準として一般的に健全とされる水準」「会社の体力（現預金・粗利）に対する大きさ」で評価する。
-   ※ benchmark は内部参考データとしてのみ使用可。competitive_strengths への利用も「参考扱い」。
+⚠️ **業界比較禁止**（絶対ルール①参照）
+   benchmark データは内部参考のみ。社長向け出力（key_insight/summary/strengths/issues/owner_message/detail）に業界平均比較を書かない。
 
 5つの見方：
 ① **時間軸（前期比・複数年トレンド）** — 伸び率で判断。絶対額に惑わされない
@@ -1898,11 +1924,10 @@ def analyze_financials(fd: FinancialData, client_name: str, industry: str,
 | 営業利益率 | 業界相当（運輸2-5%、製造3-7%、小売1-3%、サービス5-10%） | 1-2%下回り | 赤字 or 大幅下回り |
 | 流動比率 | 120-200% | 100-120% or 200%超 | <100% |
 
-【重要ルール】
-- 健全水準内（左列）の数字は **絶対に prioritized_problems に入れない**。AIの過剰反応を防ぐため
-- 健全水準内でも「前期比で大きく悪化（-20%超）」しているなら observation_notes に「念のため確認」として記載
-- 「売掛18日」「現金月商3ヶ月」「自己資本50%」のような健全な数字を課題化したら、明らかに過剰反応。出力禁止
-- 業界比較は精度低のため使わない。判断は上記の絶対水準のみ
+【重要ルール】（絶対ルール⑦の詳細）
+- 健全水準内（左列）の数字は **絶対に prioritized_problems に入れない**
+- 健全水準内でも「前期比で大きく悪化（-20%超）」なら observation_notes に「念のため確認」で記載
+- 「売掛18日」「現金月商3ヶ月」「自己資本50%」を課題化したら明らかに過剰反応。出力禁止
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
