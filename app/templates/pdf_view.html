@@ -206,6 +206,59 @@
   </div>
   {% endif %}
 
+  {# ========== 01b 販管費の構造（グループ集計） ========== #}
+  {% set eg = (result.expense_groups.selling_expenses if (result and result.expense_groups and result.expense_groups.selling_expenses) else None) %}
+  {% set eg_delta = (result.expense_groups.selling_expenses_delta if (result and result.expense_groups and result.expense_groups.selling_expenses_delta) else None) %}
+  {% if eg and eg.groups_sorted %}
+  <div class="pdf-section">
+    <div class="pdf-section-title">
+      <span class="bar"></span>
+      <span class="num">01b</span>
+      <h2>販管費の構造（グループ集計）</h2>
+    </div>
+    <div class="pdf-section-headline">
+      個別費目を「人件費・物件費・車両費」等の塊で見ると、コスト構造が一目で分かります。
+      販管費合計 {{ "{:,.0f}".format(eg.total) }}万円。
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:var(--rk-black);color:#fff;">
+          <th style="text-align:left;padding:8px 10px;font-size:12px;">グループ</th>
+          <th style="text-align:right;padding:8px 10px;font-size:12px;">今期</th>
+          <th style="text-align:right;padding:8px 10px;font-size:12px;">販管費内シェア</th>
+          {% if eg_delta %}
+          <th style="text-align:right;padding:8px 10px;font-size:12px;">前期比</th>
+          {% endif %}
+          <th style="text-align:left;padding:8px 10px;font-size:11px;">主要費目</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for group_name, group_total in eg.groups_sorted %}
+        {% set share = (group_total / eg.total * 100) if eg.total else 0 %}
+        {% set group_items = eg.groups[group_name]["entries"] %}
+        {% set delta_row = (eg_delta | selectattr('group','equalto',group_name) | first) if eg_delta else None %}
+        <tr style="border-bottom:1px solid var(--rk-border);">
+          <td style="padding:8px 10px;font-weight:700;">{{ group_name }}</td>
+          <td style="text-align:right;padding:8px 10px;font-weight:700;">{{ "{:,.0f}".format(group_total) }}万円</td>
+          <td style="text-align:right;padding:8px 10px;color:var(--rk-text-muted);">{{ "%.1f"|format(share) }}%</td>
+          {% if eg_delta %}
+          <td style="text-align:right;padding:8px 10px;color:{% if delta_row and delta_row.delta > 0 %}#E60039{% elif delta_row and delta_row.delta < 0 %}#16a34a{% else %}var(--rk-text-muted){% endif %};">
+            {% if delta_row %}
+              {{ "{:+,.0f}".format(delta_row.delta) }}万円
+              {% if delta_row.pct is not none %}<span style="font-size:10px;">({{ "%+.1f"|format(delta_row.pct) }}%)</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          {% endif %}
+          <td style="padding:8px 10px;color:var(--rk-text-muted);font-size:11px;">
+            {% for item_name, item_amt in group_items[:3] %}{{ item_name }} {{ "{:,.0f}".format(item_amt) }}万円{% if not loop.last %} / {% endif %}{% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   {# ========== 02 御社の強み ========== #}
   {% if pdf_content.section2_strengths %}
   {% set s2 = pdf_content.section2_strengths %}

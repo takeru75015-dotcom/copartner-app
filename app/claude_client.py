@@ -2322,6 +2322,33 @@ referral_partner_type の代表例（できるだけこれを使う）：
     result["trend_metrics"] = trend_metrics
     result["company_state"] = state  # 規模・健全性・禁止提案リスト（UI/PDF/バリデーション用）
 
+    # 費目グループ集計（人件費・物件費・車両費等）— PDFテンプレートで直接表示
+    try:
+        from .services.expense_grouping import aggregate_expenses, compute_group_delta
+        result["expense_groups"] = {
+            "selling_expenses": aggregate_expenses(breakdown.get("selling_expenses_detail") or {}),
+            "cost_of_sales": aggregate_expenses(breakdown.get("cost_of_sales_detail") or {}),
+        }
+        # 前期比較（履歴があれば）
+        if historical_data and len(historical_data) >= 2:
+            try:
+                sorted_hd = sorted(historical_data, key=lambda x: x.period or "")
+                prev_fd_x = None
+                for h in sorted_hd:
+                    if h.id == fd.id:
+                        break
+                    prev_fd_x = h
+                if prev_fd_x:
+                    prev_bd_x = json.loads(getattr(prev_fd_x, "breakdown_json", "{}") or "{}")
+                    result["expense_groups"]["selling_expenses_delta"] = compute_group_delta(
+                        prev_bd_x.get("selling_expenses_detail") or {},
+                        breakdown.get("selling_expenses_detail") or {},
+                    )
+            except Exception:
+                pass
+    except Exception:
+        result["expense_groups"] = {}
+
     # 各指標の前期比を計算（テンプレート表示用）
     prev_period_data = None
     if historical_data:

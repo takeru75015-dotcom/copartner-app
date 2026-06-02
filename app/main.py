@@ -1174,6 +1174,35 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
     _all_fds_for_cf = db.query(FinancialData).join(Client).filter(Client.id == fd.client_id).all()
     cash_cf = compute_cf_buckets(fd, breakdown=breakdown, historical_data=_all_fds_for_cf)
 
+    # 費目グループ集計（既存分析に無い場合の動的計算 - 過去 result への遡及適用）
+    if not filtered_result.get("expense_groups"):
+        try:
+            from .services.expense_grouping import aggregate_expenses, compute_group_delta
+            eg = {
+                "selling_expenses": aggregate_expenses(breakdown.get("selling_expenses_detail") or {}),
+                "cost_of_sales": aggregate_expenses(breakdown.get("cost_of_sales_detail") or {}),
+            }
+            # 前期比較
+            if _all_fds_for_cf and len(_all_fds_for_cf) >= 2:
+                sorted_hd = sorted(_all_fds_for_cf, key=lambda x: x.period or "")
+                prev_fd_x = None
+                for h in sorted_hd:
+                    if h.id == fd.id:
+                        break
+                    prev_fd_x = h
+                if prev_fd_x:
+                    try:
+                        prev_bd_x = json.loads(getattr(prev_fd_x, "breakdown_json", "{}") or "{}")
+                        eg["selling_expenses_delta"] = compute_group_delta(
+                            prev_bd_x.get("selling_expenses_detail") or {},
+                            breakdown.get("selling_expenses_detail") or {},
+                        )
+                    except Exception:
+                        pass
+            filtered_result["expense_groups"] = eg
+        except Exception:
+            pass
+
     return templates.TemplateResponse("pdf_view.html", {
         "request": request,
         "client": cl,

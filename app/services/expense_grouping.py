@@ -74,10 +74,10 @@ def aggregate_expenses(detail: Dict) -> Dict:
     戻り値:
     {
       "groups": {
-        "人件費": {"total": 32_500, "items": [("給与手当", 25_864), ...]},
+        "人件費": {"total": 32_500, "entries": [("給与手当", 25_864), ...]},
         "物件費": {...},
         ...
-        "その他": {"total": ..., "items": [...]}  # どのグループにも入らなかった費目
+        "その他": {"total": ..., "entries": [...]}  # どのグループにも入らなかった費目
       },
       "total": 70_730,  # 全合計
       "groups_sorted": [("人件費", 32_500), ("車両・運送費", 8_900), ...]  # 金額降順
@@ -96,9 +96,9 @@ def aggregate_expenses(detail: Dict) -> Dict:
     for item, amount in clean.items():
         group = _match_group(item) or "その他"
         if group not in groups:
-            groups[group] = {"total": 0.0, "items": []}
+            groups[group] = {"total": 0.0, "entries": []}
         groups[group]["total"] += amount
-        groups[group]["items"].append((item, amount))
+        groups[group]["entries"].append((item, amount))
 
     total = sum(g["total"] for g in groups.values())
 
@@ -110,7 +110,7 @@ def aggregate_expenses(detail: Dict) -> Dict:
 
     # items を金額順にソート
     for g in groups.values():
-        g["items"].sort(key=lambda x: -x[1])
+        g["entries"].sort(key=lambda x: -x[1])
         g["total"] = round(g["total"], 1)
 
     return {
@@ -136,7 +136,7 @@ def format_expense_groups_for_prompt(detail: Dict, label: str = "販管費",
         rev_text = f" / 売上比{ratio_rev:.1f}%" if revenue else ""
         lines.append(f"  - {group_name}: {group_total:,.0f}万円（{label}内{ratio:.1f}%{rev_text}）")
         # 上位アイテム3つまで内訳表示
-        items = agg["groups"][group_name]["items"][:3]
+        items = agg["groups"][group_name]["entries"][:3]
         for item_name, item_amt in items:
             lines.append(f"      └ {item_name}: {item_amt:,.0f}万円")
     return "\n".join(lines)
