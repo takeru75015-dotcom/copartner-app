@@ -1308,6 +1308,26 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
     _all_fds_for_cf = db.query(FinancialData).join(Client).filter(Client.id == fd.client_id).all()
     cash_cf = compute_cf_buckets(fd, breakdown=breakdown, historical_data=_all_fds_for_cf)
 
+    # 月次データ集計（pdf_view 用。analyze と同じロジック）
+    monthly_chart_data = None
+    try:
+        monthly_fds = [f for f in _all_fds_for_cf if (getattr(f, "period_type", "") == "monthly")]
+        if len(monthly_fds) >= 3:
+            import re as _re
+            def _key(f):
+                p = f.period or ""
+                y = _re.search(r"(\d{4})", p); mo = _re.search(r"年\s*(\d{1,2})\s*月", p) or _re.search(r"[/\-](\d{1,2})", p)
+                return (int(y.group(1)) if y else 0, int(mo.group(1)) if mo else 0)
+            monthly_fds.sort(key=_key)
+            monthly_chart_data = {
+                "labels": [f.period for f in monthly_fds],
+                "revenue": [round(f.revenue or 0, 1) for f in monthly_fds],
+                "operating_profit": [round(f.operating_profit or 0, 1) for f in monthly_fds],
+                "count": len(monthly_fds),
+            }
+    except Exception:
+        pass
+
     # 費目グループ集計（既存分析に無い場合の動的計算 - 過去 result への遡及適用）
     if not filtered_result.get("expense_groups"):
         try:
@@ -1348,6 +1368,7 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
         "cash_wc": cash_wc,
         "cash_ebitda": cash_ebitda,
         "cash_cf": cash_cf,
+        "monthly_chart_data": monthly_chart_data,
         "user": user,
     })
 

@@ -96,6 +96,21 @@
   .subsidy-card .purpose { font-size: 13px; color: var(--rk-black); line-height: 1.65; margin-bottom: 6px; }
   .subsidy-card .reasons { font-size: 12px; color: #1e40af; background: #eff6ff; padding: 6px 10px; border-radius: 3px; }
 
+  /* 事業部別 */
+  .segment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .segment-card { background: #fff; border: 1px solid var(--rk-border); border-left: 4px solid var(--rk-black); border-radius: 6px; padding: 12px 16px; }
+  .segment-card .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .segment-card .name { font-size: 14px; font-weight: 800; color: var(--rk-black); }
+  .segment-card .rev { font-size: 14px; font-weight: 900; color: var(--rk-black); }
+  .segment-card .share { font-size: 11px; color: var(--rk-text-muted); margin-left: 4px; }
+  .segment-card .meta { font-size: 11px; color: var(--rk-text-muted); margin-bottom: 6px; }
+  .segment-card .fact { font-size: 12px; color: var(--rk-black); line-height: 1.65; margin-bottom: 6px; padding: 6px 8px; background: var(--rk-bg-alt); border-radius: 3px; }
+  .segment-card .label { font-size: 10px; font-weight: 700; letter-spacing: .05em; color: var(--rk-text-muted); }
+  .segment-card .issues .label { color: var(--rk-accent); }
+  .segment-card .opps .label { color: #16a34a; }
+  .segment-card ul { padding-left: 1.2em; margin: 2px 0 6px; }
+  .segment-card li { font-size: 11px; line-height: 1.55; }
+
   /* まとめ */
   .conclusion-block { background: #fff; border: 1px solid var(--rk-border); border-radius: 8px; padding: 24px 28px; margin-bottom: 14px; }
   .conclusion-block.positive { border-left: 4px solid #16a34a; }
@@ -206,6 +221,23 @@
   </div>
   {% endif %}
 
+  {# ========== 01a 月次推移グラフ（月次データ3件以上ある場合） ========== #}
+  {% if monthly_chart_data and monthly_chart_data.count >= 3 %}
+  <div class="pdf-section">
+    <div class="pdf-section-title">
+      <span class="bar"></span>
+      <span class="num">01a</span>
+      <h2>月次推移（売上・営業利益）</h2>
+    </div>
+    <div class="pdf-section-headline">
+      月次データ {{ monthly_chart_data.count }}ヶ月分の売上・営業利益の推移です。季節性や月別の好不調を把握できます。
+    </div>
+    <div style="position:relative;height:260px;margin-top:14px;">
+      <canvas id="pdfMonthlyChart"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
   {# ========== 01b 販管費の構造（グループ集計） ========== #}
   {% set eg = (result.expense_groups.selling_expenses if (result and result.expense_groups and result.expense_groups.selling_expenses) else None) %}
   {% set eg_delta = (result.expense_groups.selling_expenses_delta if (result and result.expense_groups and result.expense_groups.selling_expenses_delta) else None) %}
@@ -256,6 +288,51 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+  {% endif %}
+
+  {# ========== 01c 事業部別分析（segments があれば） ========== #}
+  {% if result and result.segments and result.segments|length > 0 %}
+  <div class="pdf-section">
+    <div class="pdf-section-title">
+      <span class="bar"></span>
+      <span class="num">01c</span>
+      <h2>事業部別の状況</h2>
+    </div>
+    <div class="pdf-section-headline">
+      事業ごとに「売上規模・トレンド・課題・機会」を整理しました。撤退・集中投資の判断材料に。
+    </div>
+    <div class="segment-grid">
+      {% for seg in result.segments %}
+      <div class="segment-card">
+        <div class="head">
+          <div class="name">{{ seg.name }}</div>
+          <div>
+            <span class="rev">{{ "{:,.0f}".format(seg.revenue or 0) }}万円</span>
+            {% if seg.revenue_share %}<span class="share">{{ seg.revenue_share }}</span>{% endif %}
+          </div>
+        </div>
+        <div class="meta">
+          {% if seg.gross_margin %}粗利率: <strong>{{ seg.gross_margin }}</strong>{% endif %}
+          {% if seg.gross_margin and seg.trend %} / {% endif %}
+          {% if seg.trend %}トレンド: <strong>{{ seg.trend }}</strong>{% endif %}
+        </div>
+        {% if seg.key_facts %}<div class="fact">{{ seg.key_facts }}</div>{% endif %}
+        {% if seg.issues %}
+        <div class="issues">
+          <div class="label">⚠ 課題</div>
+          <ul>{% for iss in seg.issues %}<li>{{ iss }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+        {% if seg.opportunities %}
+        <div class="opps">
+          <div class="label">✦ 機会</div>
+          <ul>{% for op in seg.opportunities %}<li>{{ op }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
   </div>
   {% endif %}
 
@@ -483,6 +560,29 @@
 {% block scripts %}
 <script>
 (function() {
+  // ===== 月次推移チャート =====
+  {% if monthly_chart_data and monthly_chart_data.count >= 3 %}
+  const mEl_m = document.getElementById('pdfMonthlyChart');
+  if (mEl_m && window.Chart) {
+    new Chart(mEl_m, {
+      type: 'line',
+      data: {
+        labels: {{ monthly_chart_data.labels|tojson }},
+        datasets: [
+          {label: '売上（万円）', data: {{ monthly_chart_data.revenue|tojson }}, borderColor: '#0F0F19', backgroundColor: 'rgba(15,15,25,.1)', tension: .3, yAxisID: 'y'},
+          {label: '営業利益（万円）', data: {{ monthly_chart_data.operating_profit|tojson }}, borderColor: '#E60039', backgroundColor: 'rgba(230,0,57,.1)', tension: .3, yAxisID: 'y'}
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: {mode: 'index', intersect: false},
+        plugins: {legend: {position: 'bottom'}},
+        scales: {y: {beginAtZero: false, ticks: {callback: function(v){return v.toLocaleString();}}}}
+      }
+    });
+  }
+  {% endif %}
+
   {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
   const periods = {{ result.trend_metrics.periods|tojson }};
   const rev = {{ (result.trend_metrics.revenue or [])|tojson }};
