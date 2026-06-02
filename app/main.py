@@ -851,6 +851,36 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
     _all_fds_for_cf = db.query(FinancialData).join(Client).filter(Client.id == fd.client_id).all()
     cash_cf = compute_cf_buckets(fd, breakdown=breakdown, historical_data=_all_fds_for_cf)
 
+    # 費目グループ集計（販管費・売上原価のグループ別 + 前期比）
+    expense_groups = {}
+    try:
+        from .services.expense_grouping import aggregate_expenses, compute_group_delta
+        expense_groups["selling_expenses"] = aggregate_expenses(breakdown.get("selling_expenses_detail") or {})
+        expense_groups["cost_of_sales"] = aggregate_expenses(breakdown.get("cost_of_sales_detail") or {})
+        # 前期比
+        if _all_fds_for_cf and len(_all_fds_for_cf) >= 2:
+            sorted_hd = sorted(_all_fds_for_cf, key=lambda x: x.period or "")
+            prev_fd_x = None
+            for h in sorted_hd:
+                if h.id == fd.id:
+                    break
+                prev_fd_x = h
+            if prev_fd_x:
+                try:
+                    prev_bd_x = json.loads(getattr(prev_fd_x, "breakdown_json", "{}") or "{}")
+                    expense_groups["selling_expenses_delta"] = compute_group_delta(
+                        prev_bd_x.get("selling_expenses_detail") or {},
+                        breakdown.get("selling_expenses_detail") or {},
+                    )
+                    expense_groups["cost_of_sales_delta"] = compute_group_delta(
+                        prev_bd_x.get("cost_of_sales_detail") or {},
+                        breakdown.get("cost_of_sales_detail") or {},
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     existing = db.query(Analysis).filter(Analysis.financial_data_id == fd_id).order_by(Analysis.created_at.desc()).first()
     if existing:
         result = json.loads(existing.result_json)
@@ -873,6 +903,7 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "request": request, "user": user, "client": cl, "fd": fd, "result": result,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
+            "expense_groups": expense_groups,
             "analysis_id": existing.id, "cached": True,
             "dismissed_solutions": dismissed_sols,
         })
@@ -932,6 +963,7 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "request": request, "user": user, "client": cl, "fd": fd, "result": result,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
+            "expense_groups": expense_groups,
             "analysis_id": analysis.id, "cached": False
         })
     except Exception as e:
@@ -946,6 +978,7 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "request": request, "user": user, "client": cl, "fd": fd, "result": None,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
+            "expense_groups": expense_groups,
             "error": friendly_err, "cached": False, "analysis_id": None
         })
 

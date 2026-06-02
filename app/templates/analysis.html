@@ -366,6 +366,67 @@
     {% endif %}
   </div>
 
+  {# ========== 販管費 グループ集計（人件費・物件費・車両費等の塊で見る） ========== #}
+  {% set eg_app = (expense_groups.selling_expenses if (expense_groups and expense_groups.selling_expenses) else None) %}
+  {% set eg_app_delta = (expense_groups.selling_expenses_delta if (expense_groups and expense_groups.selling_expenses_delta) else None) %}
+  {% if eg_app and eg_app.groups_sorted %}
+  <div class="card p-3 mb-4">
+    <div class="fw-bold mb-2" style="color:#0F0F19;">
+      <i class="fas fa-layer-group me-2"></i>販管費 グループ集計
+      <span class="small fw-normal text-muted ms-2">— 人件費・物件費・車両費の塊で見る</span>
+    </div>
+    <div class="small text-muted mb-3">
+      販管費合計 <strong>{{ "{:,.0f}".format(eg_app.total) }}万円</strong>
+      {% if fd.revenue %}（売上比 {{ "%.1f"|format(eg_app.total / fd.revenue * 100) }}%）{% endif %}
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" style="font-size:.85rem;">
+        <thead style="background:#0F0F19;color:#fff;">
+          <tr>
+            <th style="font-size:.8rem;">グループ</th>
+            <th class="text-end" style="font-size:.8rem;">今期</th>
+            <th class="text-end" style="font-size:.8rem;">販管費内</th>
+            {% if fd.revenue %}<th class="text-end" style="font-size:.8rem;">売上比</th>{% endif %}
+            {% if eg_app_delta %}<th class="text-end" style="font-size:.8rem;">前期比</th>{% endif %}
+            <th style="font-size:.75rem;">主要費目</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for group_name, group_total in eg_app.groups_sorted %}
+          {% set share = (group_total / eg_app.total * 100) if eg_app.total else 0 %}
+          {% set group_entries = eg_app.groups[group_name]["entries"] %}
+          {% set delta_row = (eg_app_delta | selectattr('group','equalto',group_name) | first) if eg_app_delta else None %}
+          <tr>
+            <td><strong>{{ group_name }}</strong></td>
+            <td class="text-end fw-bold">{{ "{:,.0f}".format(group_total) }}万円</td>
+            <td class="text-end text-muted">{{ "%.1f"|format(share) }}%</td>
+            {% if fd.revenue %}<td class="text-end text-muted">{{ "%.1f"|format(group_total / fd.revenue * 100) }}%</td>{% endif %}
+            {% if eg_app_delta %}
+            <td class="text-end" style="color:{% if delta_row and delta_row.delta > 0 %}#E60039{% elif delta_row and delta_row.delta < 0 %}#16a34a{% else %}#6B7280{% endif %};">
+              {% if delta_row %}
+              <span class="fw-bold">{{ "{:+,.0f}".format(delta_row.delta) }}</span>
+              <span class="small">万円{% if delta_row.pct is not none %} ({{ "%+.1f"|format(delta_row.pct) }}%){% endif %}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            {% endif %}
+            <td class="small text-muted">
+              {% for item_name, item_amt in group_entries[:3] %}
+                {{ item_name }} {{ "{:,.0f}".format(item_amt) }}{% if not loop.last %} / {% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if eg_app_delta %}
+    <div class="small text-muted mt-2">
+      <i class="fas fa-info-circle me-1"></i>前期比は同じグループ集計値同士で比較。<span style="color:#E60039;">+赤</span> はコスト増、<span style="color:#16a34a;">-緑</span> はコスト減
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {# PL: 費用詳細トグル + 円グラフ #}
   {% set sed_raw = (breakdown.selling_expenses_detail if breakdown else None) %}
   {% set sed = sed_raw if (sed_raw is iterable and sed_raw is not mapping and sed_raw is not string) else [] %}
