@@ -78,6 +78,35 @@ class Analysis(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     financial_data = relationship("FinancialData", back_populates="analyses")
 
+
+# 🌟 紹介可能サービスDB（税理士が編集できるパートナー管理）
+class ReferralService(Base):
+    __tablename__ = "referral_services"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)              # 例: "支払い.com"
+    provider = Column(String, default="")              # 例: "UPSIDER株式会社"
+    category = Column(String, default="", index=True)  # "資金繰り改善"/"M&A仲介"/"CFO代行"等
+    target_issue_tags = Column(Text, default="[]")     # JSON配列: ["売掛買掛サイクル","資金繰り"]
+    target_industries = Column(Text, default='["全業種"]')  # JSON配列
+    target_size = Column(Text, default="{}")           # JSON: {"min_revenue":3000,"max_revenue":300000}
+    description_short = Column(Text, default="")       # 1-2文の短い説明
+    description_long = Column(Text, default="")        # 詳細
+    service_features = Column(Text, default="[]")      # JSON配列: ["最大60日後払い","手数料2-4%"]
+    pricing = Column(String, default="")               # 例: "手数料 2-4% / 取引額"
+    url = Column(String, default="")
+    referral_url_template = Column(String, default="") # 紹介URLテンプレ（{ref}/{client}等のplaceholder）
+    commission_type = Column(String, default="")       # "fixed"/"percentage"/"monthly"/"none"
+    commission_value = Column(Float, default=0)        # 数値
+    commission_note = Column(Text, default="")         # 例: "成約後手数料の10%"
+    logo_url = Column(String, default="")
+    notes = Column(Text, default="")                   # 税理士用メモ
+    is_active = Column(Integer, default=1)             # 0/1 (SQLite Boolean)
+    sort_order = Column(Integer, default=100)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 

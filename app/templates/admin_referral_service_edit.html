@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}{% if service %}編集{% else %}新規{% endif %}: 紹介可能サービス{% endblock %}
+{% block content %}
+{% set svc = service %}
+<div class="container py-4" style="max-width:900px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">
+      <i class="fas fa-{% if svc %}edit{% else %}plus{% endif %} me-2"></i>
+      {% if svc %}サービス編集: {{ svc.name }}{% else %}サービス新規登録{% endif %}
+    </h3>
+    <a href="/admin/referral-services" class="btn btn-outline-secondary btn-sm">← 一覧に戻る</a>
+  </div>
+
+  <form method="post" action="/admin/referral-services/save" class="card p-4">
+    {% if svc %}<input type="hidden" name="svc_id" value="{{ svc.id }}">{% endif %}
+
+    <h6 class="border-bottom pb-2 mb-3">基本情報</h6>
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label small fw-bold">サービス名 <span class="text-danger">*</span></label>
+        <input type="text" name="name" class="form-control form-control-sm" required value="{{ svc.name if svc else '' }}" placeholder="支払い.com">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold">提供元（会社名）</label>
+        <input type="text" name="provider" class="form-control form-control-sm" value="{{ svc.provider if svc else '' }}" placeholder="UPSIDER株式会社">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold">カテゴリ</label>
+        <input type="text" name="category" class="form-control form-control-sm" value="{{ svc.category if svc else '' }}" placeholder="資金繰り改善 / M&A仲介 / CFO代行 / 会計SaaS 等" list="cat_list">
+        <datalist id="cat_list">
+          <option value="資金繰り改善">
+          <option value="M&A仲介">
+          <option value="CFO代行">
+          <option value="会計SaaS">
+          <option value="データ可視化BPO">
+          <option value="不動産投資会社">
+          <option value="証券会社・IFA">
+          <option value="社労士法人">
+          <option value="業務SaaS代理店">
+          <option value="補助金代行">
+          <option value="法人保険">
+        </datalist>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold">URL</label>
+        <input type="url" name="url" class="form-control form-control-sm" value="{{ svc.url if svc else '' }}" placeholder="https://example.com">
+      </div>
+      <div class="col-md-12">
+        <label class="form-label small fw-bold">紹介URLテンプレート（税理士コード埋め込み用）</label>
+        <input type="text" name="referral_url_template" class="form-control form-control-sm" value="{{ svc.referral_url_template if svc else '' }}" placeholder="https://example.com/signup?ref={ref}&client={client}">
+        <div class="form-text small">使えるプレースホルダ: <code>{ref}</code>=税理士の紹介コード, <code>{client}</code>=クライアントID</div>
+      </div>
+    </div>
+
+    <h6 class="border-bottom pb-2 mb-3 mt-2">マッチング条件（どんな会社にこのサービスを紹介するか）</h6>
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <label class="form-label small fw-bold">対象課題タグ（改行 or カンマ区切り）</label>
+        <textarea name="target_issue_tags" class="form-control form-control-sm" rows="2" placeholder="売掛買掛サイクル&#10;資金繰り&#10;支払期日延長">{% if svc %}{% set tags = (svc.target_issue_tags | from_json) %}{% for t in tags %}{{ t }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</textarea>
+        <div class="form-text small">分析結果のキーワードとマッチング</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold">対象業種（改行 or カンマ区切り）</label>
+        <input type="text" name="target_industries" class="form-control form-control-sm" placeholder="全業種 or 製造,建設" value="{% if svc %}{% set inds = (svc.target_industries | from_json) %}{% for i in inds %}{{ i }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-bold">対象 売上 下限（万円）</label>
+        {% set ts = (svc.target_size | from_json) if svc else {} %}
+        <input type="number" name="target_revenue_min" class="form-control form-control-sm" value="{{ ts.min_revenue if ts.min_revenue is defined else '' }}" placeholder="例: 3000">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-bold">対象 売上 上限（万円）</label>
+        <input type="number" name="target_revenue_max" class="form-control form-control-sm" value="{{ ts.max_revenue if ts.max_revenue is defined else '' }}" placeholder="例: 100000">
+      </div>
+    </div>
+
+    <h6 class="border-bottom pb-2 mb-3 mt-2">説明</h6>
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <label class="form-label small fw-bold">短い説明（1-2文・カードに表示）</label>
+        <textarea name="description_short" class="form-control form-control-sm" rows="2">{{ svc.description_short if svc else '' }}</textarea>
+      </div>
+      <div class="col-12">
+        <label class="form-label small fw-bold">詳細説明</label>
+        <textarea name="description_long" class="form-control form-control-sm" rows="3">{{ svc.description_long if svc else '' }}</textarea>
+      </div>
+      <div class="col-12">
+        <label class="form-label small fw-bold">サービスの特徴（改行 or カンマ区切り）</label>
+        <textarea name="service_features" class="form-control form-control-sm" rows="2" placeholder="最大60日後払い&#10;手数料2-4%/月&#10;個人保証なし">{% if svc %}{% set fs = (svc.service_features | from_json) %}{% for f in fs %}{{ f }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</textarea>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold">料金</label>
+        <input type="text" name="pricing" class="form-control form-control-sm" value="{{ svc.pricing if svc else '' }}" placeholder="月額 3,000円〜 / 成功報酬 5%">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold">ロゴURL</label>
+        <input type="url" name="logo_url" class="form-control form-control-sm" value="{{ svc.logo_url if svc else '' }}" placeholder="https://...">
+      </div>
+    </div>
+
+    <h6 class="border-bottom pb-2 mb-3 mt-2">紹介料（税理士・運営側の取り分）</h6>
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label small fw-bold">タイプ</label>
+        <select name="commission_type" class="form-control form-control-sm">
+          {% set ct = svc.commission_type if svc else '' %}
+          <option value="" {% if ct == '' %}selected{% endif %}>—（なし）</option>
+          <option value="fixed" {% if ct == 'fixed' %}selected{% endif %}>固定額（円）</option>
+          <option value="percentage" {% if ct == 'percentage' %}selected{% endif %}>%</option>
+          <option value="monthly" {% if ct == 'monthly' %}selected{% endif %}>月額（円/月）</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small fw-bold">金額 / %</label>
+        <input type="number" step="0.01" name="commission_value" class="form-control form-control-sm" value="{{ svc.commission_value if svc else 0 }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small fw-bold">並び順</label>
+        <input type="number" name="sort_order" class="form-control form-control-sm" value="{{ svc.sort_order if svc else 100 }}">
+        <div class="form-text small">数値が小さいほど上に</div>
+      </div>
+      <div class="col-12">
+        <label class="form-label small fw-bold">紹介料メモ</label>
+        <input type="text" name="commission_note" class="form-control form-control-sm" value="{{ svc.commission_note if svc else '' }}" placeholder="例: 成約後手数料の10%（要確認）">
+      </div>
+    </div>
+
+    <h6 class="border-bottom pb-2 mb-3 mt-2">その他</h6>
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <label class="form-label small fw-bold">税理士用メモ</label>
+        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="紹介時の注意点、担当者連絡先など">{{ svc.notes if svc else '' }}</textarea>
+      </div>
+      <div class="col-12">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="is_active" name="is_active" {% if (svc and svc.is_active) or not svc %}checked{% endif %}>
+          <label class="form-check-label small fw-bold" for="is_active">有効（分析結果でマッチング対象とする）</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 justify-content-between mt-3 border-top pt-3">
+      <a href="/admin/referral-services" class="btn btn-outline-secondary btn-sm">キャンセル</a>
+      <button class="btn btn-primary btn-sm" style="background:#1a237e;border-color:#1a237e;">
+        <i class="fas fa-save me-1"></i>{% if svc %}更新{% else %}登録{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

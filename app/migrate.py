@@ -59,6 +59,37 @@ def migrate():
     ]:
         _add_column(cursor, "financial_data", col, col_def)
 
+    # referral_services テーブル新規作成
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS referral_services (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            provider TEXT DEFAULT '',
+            category TEXT DEFAULT '',
+            target_issue_tags TEXT DEFAULT '[]',
+            target_industries TEXT DEFAULT '["全業種"]',
+            target_size TEXT DEFAULT '{}',
+            description_short TEXT DEFAULT '',
+            description_long TEXT DEFAULT '',
+            service_features TEXT DEFAULT '[]',
+            pricing TEXT DEFAULT '',
+            url TEXT DEFAULT '',
+            referral_url_template TEXT DEFAULT '',
+            commission_type TEXT DEFAULT '',
+            commission_value REAL DEFAULT 0,
+            commission_note TEXT DEFAULT '',
+            logo_url TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            is_active INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 100,
+            created_by_user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_referral_services_category ON referral_services(category)")
+    print("  = referral_services table ready")
+
     conn.commit()
     conn.close()
     print("Migration done.")

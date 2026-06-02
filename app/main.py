@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 load_dotenv()
 
-from .database import init_db, get_db, User, Client, FinancialData, Analysis
+from .database import init_db, get_db, User, Client, FinancialData, Analysis, ReferralService
 from .auth import hash_password, verify_password, create_session_token, decode_session_token
 from .claude_client import (
     analyze_financials,
@@ -30,6 +30,21 @@ BASE_DIR = Path(__file__).parent
 app = FastAPI(title="CoPartner — 税理士のためのAI財務分析")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _jinja_from_json(s):
+    """Jinja2 用フィルタ: JSON文字列 → Python オブジェクト（list/dict）"""
+    if s is None:
+        return []
+    if isinstance(s, (list, dict)):
+        return s
+    try:
+        return json.loads(s)
+    except Exception:
+        return []
+
+
+templates.env.filters["from_json"] = _jinja_from_json
 
 
 def _md5_short(s) -> str:
@@ -1573,3 +1588,284 @@ def subsidy_referral(request: Request, subsidy: str = "", client: int = 0, db: S
         f"/partner-referral?type={quote('補助金代行')}&title={quote(subsidy or '補助金申請代行')}&client={client}",
         status_code=302,
     )
+
+
+# ============================================================
+# 🌟 紹介可能サービス管理（ReferralService CRUD）
+# ============================================================
+@app.get("/admin/referral-services", response_class=HTMLResponse)
+def referral_services_list(request: Request, db: Session = Depends(get_db),
+                            q: str = "", category: str = ""):
+    """紹介可能サービス 一覧"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    query = db.query(ReferralService).order_by(
+        ReferralService.is_active.desc(),
+        ReferralService.sort_order.asc(),
+        ReferralService.id.asc(),
+    )
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (ReferralService.name.like(like))
+            | (ReferralService.provider.like(like))
+            | (ReferralService.description_short.like(like))
+        )
+    if category:
+        query = query.filter(ReferralService.category == category)
+    services = query.all()
+    # カテゴリ一覧（フィルタ用）
+    cat_rows = db.query(ReferralService.category).distinct().all()
+    categories = sorted({r[0] for r in cat_rows if r[0]})
+    return templates.TemplateResponse("admin_referral_services_list.html", {
+        "request": request, "user": user,
+        "services": services, "categories": categories,
+        "q": q, "selected_category": category,
+    })
+
+
+@app.get("/admin/referral-services/new", response_class=HTMLResponse)
+def referral_services_new(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse("admin_referral_service_edit.html", {
+        "request": request, "user": user, "service": None,
+    })
+
+
+@app.get("/admin/referral-services/{svc_id}/edit", response_class=HTMLResponse)
+def referral_services_edit(svc_id: int, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    svc = db.query(ReferralService).filter(ReferralService.id == svc_id).first()
+    if not svc:
+        return RedirectResponse("/admin/referral-services", status_code=302)
+    return templates.TemplateResponse("admin_referral_service_edit.html", {
+        "request": request, "user": user, "service": svc,
+    })
+
+
+def _parse_json_list(s: str) -> str:
+    """フォーム入力の改行/カンマ区切り → JSON配列文字列"""
+    if not s:
+        return "[]"
+    s = s.strip()
+    if s.startswith("["):
+        # JSONそのまま
+        try:
+            json.loads(s)
+            return s
+        except Exception:
+            pass
+    # 改行/カンマ区切り
+    items = [x.strip() for x in s.replace("\r", "").replace("、", ",").replace("\n", ",").split(",") if x.strip()]
+    return json.dumps(items, ensure_ascii=False)
+
+
+@app.post("/admin/referral-services/save")
+def referral_services_save(
+    request: Request, db: Session = Depends(get_db),
+    svc_id: str = Form(""),
+    name: str = Form(...),
+    provider: str = Form(""),
+    category: str = Form(""),
+    target_issue_tags: str = Form(""),
+    target_industries: str = Form(""),
+    target_revenue_min: str = Form(""),
+    target_revenue_max: str = Form(""),
+    description_short: str = Form(""),
+    description_long: str = Form(""),
+    service_features: str = Form(""),
+    pricing: str = Form(""),
+    url: str = Form(""),
+    referral_url_template: str = Form(""),
+    commission_type: str = Form(""),
+    commission_value: str = Form("0"),
+    commission_note: str = Form(""),
+    logo_url: str = Form(""),
+    notes: str = Form(""),
+    is_active: str = Form("on"),
+    sort_order: str = Form("100"),
+):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+
+    # target_size JSON
+    ts = {}
+    try:
+        if target_revenue_min:
+            ts["min_revenue"] = float(target_revenue_min)
+        if target_revenue_max:
+            ts["max_revenue"] = float(target_revenue_max)
+    except ValueError:
+        pass
+
+    payload = {
+        "name": name.strip(),
+        "provider": provider.strip(),
+        "category": category.strip(),
+        "target_issue_tags": _parse_json_list(target_issue_tags),
+        "target_industries": _parse_json_list(target_industries) or '["全業種"]',
+        "target_size": json.dumps(ts, ensure_ascii=False),
+        "description_short": description_short.strip(),
+        "description_long": description_long.strip(),
+        "service_features": _parse_json_list(service_features),
+        "pricing": pricing.strip(),
+        "url": url.strip(),
+        "referral_url_template": referral_url_template.strip(),
+        "commission_type": commission_type.strip(),
+        "commission_value": float(commission_value or 0) if (commission_value or "").strip() else 0,
+        "commission_note": commission_note.strip(),
+        "logo_url": logo_url.strip(),
+        "notes": notes.strip(),
+        "is_active": 1 if is_active in ("on", "1", "true") else 0,
+        "sort_order": int(sort_order or 100),
+    }
+
+    if svc_id and svc_id.isdigit():
+        svc = db.query(ReferralService).filter(ReferralService.id == int(svc_id)).first()
+        if svc:
+            for k, v in payload.items():
+                setattr(svc, k, v)
+            db.commit()
+            return RedirectResponse(f"/admin/referral-services?saved={svc.id}", status_code=302)
+    # 新規
+    payload["created_by_user_id"] = user.id
+    svc = ReferralService(**payload)
+    db.add(svc); db.commit(); db.refresh(svc)
+    return RedirectResponse(f"/admin/referral-services?saved={svc.id}", status_code=302)
+
+
+@app.post("/admin/referral-services/{svc_id}/delete")
+def referral_services_delete(svc_id: int, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    svc = db.query(ReferralService).filter(ReferralService.id == svc_id).first()
+    if svc:
+        db.delete(svc); db.commit()
+    return RedirectResponse("/admin/referral-services?deleted=1", status_code=302)
+
+
+@app.post("/admin/referral-services/{svc_id}/toggle")
+def referral_services_toggle(svc_id: int, request: Request, db: Session = Depends(get_db)):
+    """有効/無効切替"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    svc = db.query(ReferralService).filter(ReferralService.id == svc_id).first()
+    if svc:
+        svc.is_active = 0 if svc.is_active else 1
+        db.commit()
+    return RedirectResponse("/admin/referral-services", status_code=302)
+
+
+@app.post("/admin/referral-services/seed")
+def referral_services_seed(request: Request, db: Session = Depends(get_db)):
+    """シードデータを投入（既に名前が存在するものはスキップ）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    seeds = [
+        {
+            "name": "支払い.com",
+            "provider": "UPSIDER株式会社",
+            "category": "資金繰り改善",
+            "target_issue_tags": ["売掛買掛サイクル", "資金繰り", "支払期日延長", "運転資金", "キャッシュフロー改善"],
+            "target_industries": ["全業種"],
+            "target_size": {"min_revenue": 3000},
+            "description_short": "請求書を最大60日後払いにできる支払いサービス。買掛サイトを延ばして資金繰りを改善。",
+            "description_long": "UPSIDERの法人カード決済を経由して、取引先への振込を最大60日後払いにできる。買掛金の支払期日を延ばすことで、キャッシュフローを改善。個人保証なし。",
+            "service_features": ["最大60日後払い", "手数料4%/月", "個人保証なし", "Visa法人カード経由", "審査スピード重視"],
+            "pricing": "手数料 4%（取引額）",
+            "url": "https://shi-harai.com",
+            "commission_type": "percentage", "commission_value": 10.0,
+            "commission_note": "成約後手数料の10%（要確認）",
+            "sort_order": 10,
+        },
+        {
+            "name": "M&Aクラウド",
+            "provider": "株式会社M&Aクラウド",
+            "category": "M&A仲介",
+            "target_issue_tags": ["事業承継", "M&A", "売却検討", "事業拡大"],
+            "target_industries": ["全業種"],
+            "target_size": {"min_revenue": 10000},
+            "description_short": "中小企業向けM&Aプラットフォーム。買い手・売り手のマッチングから成約まで支援。",
+            "service_features": ["1万社超の買い手", "成功報酬制", "事業承継対応", "DD支援"],
+            "pricing": "成功報酬 取引額の5%程度",
+            "url": "https://macloud.jp",
+            "commission_type": "percentage", "commission_value": 5.0,
+            "commission_note": "成約時手数料の5%（要交渉）",
+            "sort_order": 20,
+        },
+        {
+            "name": "freee会計",
+            "provider": "freee株式会社",
+            "category": "会計SaaS",
+            "target_issue_tags": ["業務効率化", "DX", "経理人手不足", "クラウド化"],
+            "target_industries": ["全業種"],
+            "target_size": {"max_revenue": 100000},
+            "description_short": "中小企業向けクラウド会計ソフト。請求書発行・経費精算・申告まで一気通貫。",
+            "service_features": ["月額2,680円〜", "銀行連携", "請求書自動取込", "電子帳簿保存法対応"],
+            "pricing": "月額 2,680〜5,980円",
+            "url": "https://www.freee.co.jp",
+            "commission_type": "fixed", "commission_value": 30000,
+            "commission_note": "成約時 30,000円（参考）",
+            "sort_order": 30,
+        },
+        {
+            "name": "ビズリーチ・サクシード",
+            "provider": "株式会社ビズリーチ",
+            "category": "M&A仲介",
+            "target_issue_tags": ["事業承継", "M&A", "後継者不在"],
+            "target_industries": ["全業種"],
+            "description_short": "後継者不在の中小企業向け事業承継M&Aプラットフォーム。買い手探索を効率化。",
+            "service_features": ["事業承継特化", "完全成功報酬", "オンライン交渉対応"],
+            "pricing": "完全成功報酬",
+            "url": "https://br-succeed.jp",
+            "commission_type": "percentage", "commission_value": 3.0,
+            "commission_note": "成約時 取引額の3%（要交渉）",
+            "sort_order": 25,
+        },
+        {
+            "name": "MFクラウド債権請求",
+            "provider": "株式会社マネーフォワード",
+            "category": "資金繰り改善",
+            "target_issue_tags": ["売掛回収", "請求業務効率化", "資金繰り"],
+            "target_industries": ["全業種"],
+            "description_short": "請求書発行から入金消込まで自動化。売掛金の見える化と回収サイクル短縮。",
+            "service_features": ["請求書自動発行", "入金消込自動", "売掛残高ダッシュボード"],
+            "pricing": "月額 3,980円〜",
+            "url": "https://biz.moneyforward.com/invoice",
+            "commission_type": "fixed", "commission_value": 20000,
+            "commission_note": "成約時 20,000円（参考）",
+            "sort_order": 40,
+        },
+    ]
+    added = 0
+    for s in seeds:
+        if db.query(ReferralService).filter(ReferralService.name == s["name"]).first():
+            continue
+        rs = ReferralService(
+            name=s["name"], provider=s.get("provider", ""), category=s.get("category", ""),
+            target_issue_tags=json.dumps(s.get("target_issue_tags", []), ensure_ascii=False),
+            target_industries=json.dumps(s.get("target_industries", ["全業種"]), ensure_ascii=False),
+            target_size=json.dumps(s.get("target_size", {}), ensure_ascii=False),
+            description_short=s.get("description_short", ""),
+            description_long=s.get("description_long", ""),
+            service_features=json.dumps(s.get("service_features", []), ensure_ascii=False),
+            pricing=s.get("pricing", ""), url=s.get("url", ""),
+            referral_url_template=s.get("referral_url_template", ""),
+            commission_type=s.get("commission_type", ""),
+            commission_value=s.get("commission_value", 0),
+            commission_note=s.get("commission_note", ""),
+            sort_order=s.get("sort_order", 100),
+            created_by_user_id=user.id,
+        )
+        db.add(rs); added += 1
+    db.commit()
+    return RedirectResponse(f"/admin/referral-services?seeded={added}", status_code=302)
