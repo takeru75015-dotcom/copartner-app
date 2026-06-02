@@ -562,17 +562,36 @@ def _check_data_quality(financials: list) -> list:
             "action": "「⚠️ データ不足」バッジ付きの期を🗑️で個別削除するか、🧹【重複期を整理】で他のレコードと自動マージできます。",
         })
 
-    # 3. 売上規模の異常な差（月次 vs 年次混在）
+    # 3. 売上規模の異常な差（月次 vs 年次混在 / 単位ミス）
     revenues = [f.revenue for f in financials if f.revenue and f.revenue > 0]
     if len(revenues) >= 2:
         ratio = max(revenues) / min(revenues)
         if ratio > 10:
-            issues.append({
-                "severity": "high",
-                "title": "⚠️ 売上規模に大きな差があります",
-                "message": f"最小 {min(revenues):,.0f}万円 vs 最大 {max(revenues):,.0f}万円（{ratio:.0f}倍差）。月次の単月データと年次決算が混在している疑い。",
-                "action": "月次推移ファイルは個別に分かれている場合があります。**通期決算データ（PL推移表・決算書PDF）を優先**してください。",
-            })
+            # 単位ミスの可能性が高いケース（100倍・10000倍）を判別
+            unit_mismatch_likely = False
+            for r in revenues:
+                for r2 in revenues:
+                    if r > 0 and r2 > 0:
+                        rr = r / r2
+                        if 80 <= rr <= 120 or 900 <= rr <= 1100 or 9000 <= rr <= 11000:
+                            unit_mismatch_likely = True
+                            break
+                if unit_mismatch_likely:
+                    break
+            if unit_mismatch_likely:
+                issues.append({
+                    "severity": "high",
+                    "title": "🚨 単位の桁違いを検出（円⇔万円⇔百万円の取り違え疑い）",
+                    "message": f"最小 {min(revenues):,.0f} vs 最大 {max(revenues):,.0f}（{ratio:.0f}倍差）。100倍/1万倍に近い差があり、円ベースで保存されたレコードと万円ベースが混在している疑い。",
+                    "action": "桁ミスのレコードを🗑️で削除→PDF再アップロード推奨。または各レコードを開いて手動補正。",
+                })
+            else:
+                issues.append({
+                    "severity": "high",
+                    "title": "⚠️ 売上規模に大きな差があります",
+                    "message": f"最小 {min(revenues):,.0f}万円 vs 最大 {max(revenues):,.0f}万円（{ratio:.0f}倍差）。月次の単月データと年次決算が混在している疑い。",
+                    "action": "月次推移ファイルは個別に分かれている場合があります。**通期決算データ（PL推移表・決算書PDF）を優先**してください。",
+                })
 
     # 4. 売上原価0で粗利率が異常に高い
     high_gm = sum(1 for f in financials if f.revenue and f.gross_profit and (f.gross_profit / f.revenue) > 0.95 and not f.cost_of_sales)
@@ -721,9 +740,11 @@ async def upload_pdf(client_id: int, request: Request,
             db.commit(); db.refresh(existing)
             return existing.id
 
-        # 期間文字列から月次/年次を自動判定
-        from .services.period_classifier import classify_period
+        # 期間文字列を西暦正規化 + 月次/年次を自動判定
+        from .services.period_classifier import classify_period, normalize_to_seireki
+        period = normalize_to_seireki(period or "")
         ptype, fy_label = classify_period(period)
+        fy_label = normalize_to_seireki(fy_label)
 
         # 新規作成
         fd = FinancialData(
@@ -949,6 +970,8 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "expense_groups": expense_groups,
+            "aggregation_meta": aggregation_meta,
+            "monthly_chart_data": monthly_chart_data,
             "analysis_id": existing.id, "cached": True,
             "dismissed_solutions": dismissed_sols,
         })
@@ -968,14 +991,32 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
     # 🔥 月次優先ロジック：月次データがあれば年度ごとに集計し、年次データを置き換える
     aggregation_meta = {"monthly_count": 0, "annual_count": 0, "aggregated_count": 0,
                         "fiscal_years_with_monthly": [], "discrepancies_by_fy": {}}
+    monthly_chart_data = None  # 月次グラフ用データ
     try:
         from .services.monthly_aggregator import build_effective_historical_data
         effective_fds, aggregation_meta = build_effective_historical_data(all_fds_for_client)
         if aggregation_meta.get("aggregated_count", 0) > 0:
             all_fds_for_client = effective_fds
             print(f"[月次優先] aggregated {aggregation_meta['aggregated_count']} fiscal years from "
-                  f"{aggregation_meta['monthly_count']} monthly records "
-                  f"(annual remaining: {len([f for f in effective_fds if getattr(f,'period_type','') != 'annual_aggregated'])})", flush=True)
+                  f"{aggregation_meta['monthly_count']} monthly records", flush=True)
+
+        # 月次グラフ用データ生成（月次データが3件以上ある場合）
+        monthly_fds_for_chart = [f for f in _sorted if getattr(f, "period_type", "") == "monthly"]
+        if len(monthly_fds_for_chart) >= 3:
+            import re as _re
+            def _key(f):
+                p = f.period or ""
+                y = _re.search(r"(\d{4})", p)
+                m = _re.search(r"年\s*(\d{1,2})\s*月", p) or _re.search(r"[/\-](\d{1,2})", p)
+                return (int(y.group(1)) if y else 0, int(m.group(1)) if m else 0)
+            monthly_fds_for_chart.sort(key=_key)
+            monthly_chart_data = {
+                "labels": [f.period for f in monthly_fds_for_chart],
+                "revenue": [round(f.revenue or 0, 1) for f in monthly_fds_for_chart],
+                "operating_profit": [round(f.operating_profit or 0, 1) for f in monthly_fds_for_chart],
+                "cash": [round(f.cash or 0, 1) for f in monthly_fds_for_chart],
+                "count": len(monthly_fds_for_chart),
+            }
     except Exception as _e:
         print(f"[月次優先] skip: {_e}", flush=True)
 
@@ -1022,6 +1063,8 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "expense_groups": expense_groups,
+            "aggregation_meta": aggregation_meta,
+            "monthly_chart_data": monthly_chart_data,
             "analysis_id": analysis.id, "cached": False
         })
     except Exception as e:

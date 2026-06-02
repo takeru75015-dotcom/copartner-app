@@ -88,6 +88,43 @@ def _compute_fiscal_year_label(year: int, month: int, fiscal_close_month: int) -
         return f"{year+1}年{fiscal_close_month}月期"
 
 
+def normalize_to_seireki(period: str) -> str:
+    """期間文字列を西暦表記に正規化。
+    例:
+      "令和7年2月期（第50期）"   → "2025年2月期（第50期）"
+      "令和6年8月期"              → "2024年8月期"
+      "R6.3月"                    → "2024年3月"
+      "平成31年3月期"             → "2019年3月期"
+      "2024年3月期"               → "2024年3月期"（変化なし）
+      "令和5年3月1日～令和6年2月29日（第49期）" → "2023年3月1日～2024年2月29日（第49期）"
+    """
+    if not period:
+        return period
+    s = period
+
+    def _reiwa(m):
+        year = 2018 + int(m.group(1))
+        return f"{year}年"
+    def _heisei(m):
+        year = 1988 + int(m.group(1))
+        return f"{year}年"
+    def _showa(m):
+        year = 1925 + int(m.group(1))
+        return f"{year}年"
+
+    # 令和X年 → YYYY年
+    s = re.sub(r"令和\s*(\d{1,2})\s*年", _reiwa, s)
+    s = re.sub(r"R\s*(\d{1,2})[\.\s年]", lambda m: f"{2018 + int(m.group(1))}年", s)
+    # 平成X年 → YYYY年
+    s = re.sub(r"平成\s*(\d{1,2})\s*年", _heisei, s)
+    s = re.sub(r"H\s*(\d{1,2})[\.\s年]", lambda m: f"{1988 + int(m.group(1))}年", s)
+    # 昭和X年 → YYYY年
+    s = re.sub(r"昭和\s*(\d{1,2})\s*年", _showa, s)
+    s = re.sub(r"S\s*(\d{1,2})[\.\s年]", lambda m: f"{1925 + int(m.group(1))}年", s)
+
+    return s
+
+
 def guess_fiscal_close_month(monthly_periods: list) -> int:
     """月次データ群から決算月を推定。
     - 最も多く現れる「年末位置」+1 で推定

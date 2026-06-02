@@ -250,6 +250,74 @@
 {# ========== タブ1：財務概要 ========== #}
 <div class="cp-tab-panel active" id="panel-overview">
 
+  {# 📈 月次グラフ（月次データ3件以上ある場合） #}
+  {% if monthly_chart_data and monthly_chart_data.count >= 3 %}
+  <div class="card p-3 mb-4">
+    <div class="fw-bold mb-2" style="color:#0F0F19;">
+      <i class="fas fa-chart-line me-2"></i>月次推移グラフ
+      <span class="small fw-normal text-muted ms-2">— 月次データ {{ monthly_chart_data.count }}件の推移</span>
+    </div>
+    <div style="position:relative;height:300px;">
+      <canvas id="monthlyTrendChart"></canvas>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var ctx = document.getElementById('monthlyTrendChart');
+      if (!ctx || typeof Chart === 'undefined') return;
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: {{ monthly_chart_data.labels | tojson }},
+          datasets: [
+            {label: '売上（万円）', data: {{ monthly_chart_data.revenue | tojson }}, borderColor: '#1a237e', backgroundColor: 'rgba(26,35,126,.1)', tension: .3, yAxisID: 'y'},
+            {label: '営業利益（万円）', data: {{ monthly_chart_data.operating_profit | tojson }}, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.1)', tension: .3, yAxisID: 'y'},
+            {label: '現預金（万円）', data: {{ monthly_chart_data.cash | tojson }}, borderColor: '#E60039', backgroundColor: 'rgba(230,0,57,.1)', borderDash:[5,3], tension: .3, yAxisID: 'y'}
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: {mode: 'index', intersect: false},
+          plugins: {legend: {position: 'bottom'}, tooltip: {callbacks: {label: function(c){return c.dataset.label + ': ' + c.parsed.y.toLocaleString() + '万円';}}}},
+          scales: {y: {beginAtZero: false, ticks: {callback: function(v){return v.toLocaleString();}}}}
+        }
+      });
+    })();
+  </script>
+  {% endif %}
+
+  {# 🌟 月次優先インジケータ #}
+  {% if aggregation_meta and aggregation_meta.aggregated_count and aggregation_meta.aggregated_count > 0 %}
+  <div class="alert mb-3" style="background:linear-gradient(90deg,#eff6ff,#dbeafe);border-left:4px solid #2563eb;color:#1e3a8a;">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fas fa-calendar-check mt-1"></i>
+      <div>
+        <div class="fw-bold small">📊 月次優先モードで分析中</div>
+        <div class="small mt-1">
+          月次データ {{ aggregation_meta.monthly_count }}件 → {{ aggregation_meta.aggregated_count }}年度分に自動集計し、分析に使用しています。
+          {% if aggregation_meta.fiscal_years_with_monthly %}
+            集計対象: {{ aggregation_meta.fiscal_years_with_monthly | join(' / ') }}
+          {% endif %}
+        </div>
+        {% if aggregation_meta.discrepancies_by_fy %}
+        <details class="mt-2">
+          <summary class="small fw-bold" style="cursor:pointer;color:#92400e;">⚠️ 月次集計と年次データの乖離あり（クリックで詳細）</summary>
+          <ul class="small mb-0 mt-1">
+            {% for fy, ds in aggregation_meta.discrepancies_by_fy.items() %}
+            <li>{{ fy }}:
+              {% for d in ds %}
+                {{ d.field }} 月次合計 {{ "{:,.0f}".format(d.monthly_total) }} vs 年次 {{ "{:,.0f}".format(d.annual) }} ({{ d.pct }}%乖離){% if not loop.last %} / {% endif %}
+              {% endfor %}
+            </li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {# ヒアリング質問（業種判定要確認） #}
   {% if result.industry_confidence == 'low' and result.hearing_sheet %}
   <div class="alert alert-warning mb-4" style="background: #F7F7F9; border-color: #6B7280;">
@@ -365,6 +433,50 @@
     </div>
     {% endif %}
   </div>
+
+  {# ========== 🏢 事業部別分析（複数事業ある場合） ========== #}
+  {% if result and result.segments and result.segments | length > 0 %}
+  <div class="card p-3 mb-4">
+    <div class="fw-bold mb-2" style="color:#0F0F19;">
+      <i class="fas fa-building me-2"></i>事業部別分析
+      <span class="small fw-normal text-muted ms-2">— 各事業の特徴と課題を別々に</span>
+    </div>
+    <div class="row g-3 mt-1">
+      {% for seg in result.segments %}
+      <div class="col-md-6">
+        <div class="border rounded p-3 h-100" style="border-left:4px solid #1a237e !important;">
+          <div class="d-flex justify-content-between align-items-baseline mb-2">
+            <h6 class="fw-bold mb-0">{{ seg.name }}</h6>
+            <div class="text-end">
+              <div class="small fw-bold" style="color:#1a237e;">{{ "{:,.0f}".format(seg.revenue or 0) }}万円</div>
+              {% if seg.revenue_share %}<div class="small text-muted">{{ seg.revenue_share }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="small text-muted mb-2">
+            {% if seg.gross_margin %}粗利率: <strong style="color:#0F0F19;">{{ seg.gross_margin }}</strong>{% endif %}
+            {% if seg.trend %} / トレンド: <strong style="color:#0F0F19;">{{ seg.trend }}</strong>{% endif %}
+          </div>
+          {% if seg.key_facts %}
+          <div class="small mb-2" style="background:#f7f7f9;padding:8px 10px;border-radius:4px;">{{ seg.key_facts }}</div>
+          {% endif %}
+          {% if seg.issues %}
+          <div class="small mb-1"><strong style="color:#E60039;">課題:</strong></div>
+          <ul class="small mb-2" style="padding-left:1.2em;">
+            {% for iss in seg.issues %}<li>{{ iss }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+          {% if seg.opportunities %}
+          <div class="small mb-1"><strong style="color:#16a34a;">機会:</strong></div>
+          <ul class="small mb-0" style="padding-left:1.2em;">
+            {% for op in seg.opportunities %}<li>{{ op }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   {# ========== 販管費 グループ集計（人件費・物件費・車両費等の塊で見る） ========== #}
   {% set eg_app = (expense_groups.selling_expenses if (expense_groups and expense_groups.selling_expenses) else None) %}

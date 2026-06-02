@@ -61,29 +61,45 @@ def migrate():
     ]:
         _add_column(cursor, "financial_data", col, col_def)
 
-    # 既存 financial_data の period_type / fiscal_year を遡及判定
-    # （月次データ「2024年5月」 vs 年次「2024年5月期」を自動分類）
+    # 既存 financial_data の period を西暦に正規化 + period_type / fiscal_year 遡及判定
     try:
-        cursor.execute("SELECT id, period, period_type, fiscal_year FROM financial_data WHERE period_type IS NULL OR period_type = ''")
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from app.services.period_classifier import classify_period, normalize_to_seireki
+
+        cursor.execute("SELECT id, period, period_type, fiscal_year FROM financial_data")
         rows = cursor.fetchall()
-        if rows:
-            # period_classifier を後でインポート（main.py 経由でなく直接）
-            import sys, os as _os
-            sys.path.insert(0, str(Path(__file__).parent.parent))
-            from app.services.period_classifier import classify_period
-            updated = 0
-            for rid, period, _pt, _fy in rows:
-                ptype, fy = classify_period(period or "")
+        normalized = 0
+        reclassified = 0
+        for rid, period, pt, fy in rows:
+            # 西暦正規化
+            new_period = normalize_to_seireki(period or "")
+            need_update = False
+            if new_period != period:
+                period = new_period
+                need_update = True
+                normalized += 1
+            # period_type / fiscal_year を再判定
+            if not pt or pt == "":
+                ptype, fyl = classify_period(period or "")
                 if ptype:
                     cursor.execute(
-                        "UPDATE financial_data SET period_type = ?, fiscal_year = ? WHERE id = ?",
-                        (ptype, fy, rid)
+                        "UPDATE financial_data SET period = ?, period_type = ?, fiscal_year = ? WHERE id = ?",
+                        (period, ptype, normalize_to_seireki(fyl), rid)
                     )
-                    updated += 1
-            if updated > 0:
-                print(f"  + reclassified {updated} financial_data rows (period_type/fiscal_year)")
+                    reclassified += 1
+                    need_update = False  # 上の UPDATE で更新済
+            if need_update:
+                cursor.execute(
+                    "UPDATE financial_data SET period = ?, fiscal_year = ? WHERE id = ?",
+                    (period, normalize_to_seireki(fy or ""), rid)
+                )
+        if normalized > 0:
+            print(f"  + normalized {normalized} period strings to 西暦")
+        if reclassified > 0:
+            print(f"  + reclassified {reclassified} financial_data rows (period_type/fiscal_year)")
     except Exception as e:
-        print(f"  ! period reclassify skip: {e}")
+        print(f"  ! period normalize/reclassify skip: {e}")
 
     # referral_services テーブル新規作成
     cursor.execute("""
