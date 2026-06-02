@@ -106,12 +106,17 @@
       </script>
 
       <div class="border-top pt-3 mt-3">
-        <div class="small fw-semibold mb-2"><i class="fas fa-file-upload me-1 text-primary"></i>補足資料 PDF / 画像 をアップロード（会社概要・事業計画・KPI・<strong>顧客別売上</strong>・<strong>商品別売上</strong> 等）</div>
-        <div class="small text-muted mb-2">PDF・PNG・JPG 対応。AIが自動で事業構成テキストに追記します。</div>
-        <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
-          <input type="file" name="file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" required>
+        <div class="small fw-semibold mb-2"><i class="fas fa-file-upload me-1 text-primary"></i>補足資料 PDF / 画像 をアップロード（会社概要・事業計画・KPI・<strong>顧客別売上</strong>・<strong>商品別売上</strong>・<strong>事業部別資料</strong> 等）</div>
+        <div class="small text-muted mb-2">
+          PDF・PNG・JPG 対応。AIが自動で事業構成テキストに追記します。<br>
+          <strong>🆕 複数ファイル同時選択OK</strong>（Ctrl/⌘押しながら選択、または Shift で範囲選択）。順番に AI で読み取り。
+        </div>
+        <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data" class="d-flex gap-2 align-items-end"
+              onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('.upload-spinner').classList.remove('d-none');">
+          <input type="file" name="files" multiple class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" required>
           <button type="submit" class="btn btn-outline-primary btn-sm flex-shrink-0">
             <i class="fas fa-magic me-1"></i>AIで読取＆追記
+            <span class="spinner-border spinner-border-sm ms-2 upload-spinner d-none" role="status"></span>
           </button>
         </form>
       </div>

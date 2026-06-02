@@ -484,9 +484,11 @@ async def upload_ledger(client_id: int, request: Request,
 
 @app.post("/clients/{client_id}/upload-context")
 async def upload_business_context(client_id: int, request: Request,
-                                   file: UploadFile = File(...),
+                                   files: list[UploadFile] = File(...),
                                    db: Session = Depends(get_db)):
-    """会社概要・事業計画・KPI進捗の補足資料 PDF を読み取り business_details に追記"""
+    """会社概要・事業計画・KPI進捗の補足資料を読み取り business_details に追記。
+    複数ファイル同時アップロード対応。順番に AI で抽出して追記。
+    """
     user = get_current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -494,24 +496,46 @@ async def upload_business_context(client_id: int, request: Request,
     if not cl:
         return RedirectResponse("/dashboard", status_code=302)
 
-    try:
-        content = await file.read()
-        if AI_PROVIDER != "claude":
-            return RedirectResponse(
-                f"/clients/{client_id}?err=資料の自動読取は Claude 切替時のみ対応しています",
-                status_code=302,
-            )
-        extracted = extract_business_context_from_pdf(content, file.filename)
-        # 既存の business_details に追記
-        stamp = f"\n\n--- {file.filename} から自動抽出 ---\n"
-        cl.business_details = (cl.business_details or "") + stamp + extracted
-        db.commit()
-    except Exception as e:
+    if AI_PROVIDER != "claude":
         return RedirectResponse(
-            f"/clients/{client_id}?err=資料読取失敗: {str(e)[:100]}",
+            f"/clients/{client_id}?err=資料の自動読取は Claude 切替時のみ対応しています",
             status_code=302,
         )
-    return RedirectResponse(f"/clients/{client_id}", status_code=302)
+
+    success_count = 0
+    error_msgs = []
+    for f in files:
+        if not f or not f.filename:
+            continue
+        try:
+            content = await f.read()
+            if not content:
+                error_msgs.append(f"{f.filename}: 空ファイル")
+                continue
+            extracted = extract_business_context_from_pdf(content, f.filename)
+            stamp = f"\n\n--- {f.filename} から自動抽出 ---\n"
+            cl.business_details = (cl.business_details or "") + stamp + extracted
+            success_count += 1
+        except Exception as e:
+            error_msgs.append(f"{f.filename}: {str(e)[:60]}")
+
+    if success_count > 0:
+        db.commit()
+
+    if error_msgs and success_count == 0:
+        return RedirectResponse(
+            f"/clients/{client_id}?err=" + quote("資料読取失敗: " + " / ".join(error_msgs)[:200]),
+            status_code=302,
+        )
+    if error_msgs:
+        return RedirectResponse(
+            f"/clients/{client_id}?ok=" + quote(f"{success_count}件読取成功 / 失敗: " + " / ".join(error_msgs)[:150]),
+            status_code=302,
+        )
+    return RedirectResponse(
+        f"/clients/{client_id}?ok=" + quote(f"{success_count}件のファイルから事業情報を追記しました"),
+        status_code=302,
+    )
 
 def _check_data_quality(financials: list) -> list:
     """登録された財務データの品質をチェックし、警告メッセージのリストを返す"""
