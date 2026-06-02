@@ -721,10 +721,16 @@ async def upload_pdf(client_id: int, request: Request,
             db.commit(); db.refresh(existing)
             return existing.id
 
+        # 期間文字列から月次/年次を自動判定
+        from .services.period_classifier import classify_period
+        ptype, fy_label = classify_period(period)
+
         # 新規作成
         fd = FinancialData(
             client_id=client_id,
             period=period,
+            period_type=ptype,
+            fiscal_year=fy_label,
             revenue=data.get("revenue", 0) or 0,
             cost_of_sales=data.get("cost_of_sales", 0) or 0,
             gross_profit=data.get("gross_profit", 0) or 0,
@@ -955,10 +961,23 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
     _sorted = sorted(_all_fds, key=lambda x: x.period or "")
     _idx = next((i for i, x in enumerate(_sorted) if x.id == fd.id), None)
     if _idx is None:
-        # 見つからなければ安全側：現在のfdだけ
         all_fds_for_client = [fd]
     else:
         all_fds_for_client = _sorted[: _idx + 1]
+
+    # 🔥 月次優先ロジック：月次データがあれば年度ごとに集計し、年次データを置き換える
+    aggregation_meta = {"monthly_count": 0, "annual_count": 0, "aggregated_count": 0,
+                        "fiscal_years_with_monthly": [], "discrepancies_by_fy": {}}
+    try:
+        from .services.monthly_aggregator import build_effective_historical_data
+        effective_fds, aggregation_meta = build_effective_historical_data(all_fds_for_client)
+        if aggregation_meta.get("aggregated_count", 0) > 0:
+            all_fds_for_client = effective_fds
+            print(f"[月次優先] aggregated {aggregation_meta['aggregated_count']} fiscal years from "
+                  f"{aggregation_meta['monthly_count']} monthly records "
+                  f"(annual remaining: {len([f for f in effective_fds if getattr(f,'period_type','') != 'annual_aggregated'])})", flush=True)
+    except Exception as _e:
+        print(f"[月次優先] skip: {_e}", flush=True)
 
     try:
         # 保存されたヒアリング回答を business_details に追記（AI に文脈として渡す）

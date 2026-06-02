@@ -56,8 +56,34 @@ def migrate():
         ("equity", "REAL DEFAULT 0"),
         ("employees", "INTEGER DEFAULT 0"),
         ("breakdown_json", "TEXT DEFAULT '{}'"),
+        ("period_type", "TEXT DEFAULT ''"),   # 'annual'/'monthly'
+        ("fiscal_year", "TEXT DEFAULT ''"),   # 月次データの所属年度
     ]:
         _add_column(cursor, "financial_data", col, col_def)
+
+    # 既存 financial_data の period_type / fiscal_year を遡及判定
+    # （月次データ「2024年5月」 vs 年次「2024年5月期」を自動分類）
+    try:
+        cursor.execute("SELECT id, period, period_type, fiscal_year FROM financial_data WHERE period_type IS NULL OR period_type = ''")
+        rows = cursor.fetchall()
+        if rows:
+            # period_classifier を後でインポート（main.py 経由でなく直接）
+            import sys, os as _os
+            sys.path.insert(0, str(Path(__file__).parent.parent))
+            from app.services.period_classifier import classify_period
+            updated = 0
+            for rid, period, _pt, _fy in rows:
+                ptype, fy = classify_period(period or "")
+                if ptype:
+                    cursor.execute(
+                        "UPDATE financial_data SET period_type = ?, fiscal_year = ? WHERE id = ?",
+                        (ptype, fy, rid)
+                    )
+                    updated += 1
+            if updated > 0:
+                print(f"  + reclassified {updated} financial_data rows (period_type/fiscal_year)")
+    except Exception as e:
+        print(f"  ! period reclassify skip: {e}")
 
     # referral_services テーブル新規作成
     cursor.execute("""

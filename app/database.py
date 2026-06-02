@@ -41,7 +41,9 @@ class FinancialData(Base):
     __tablename__ = "financial_data"
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
-    period = Column(String, nullable=False)          # 例: "2024年3月期"
+    period = Column(String, nullable=False)          # 例: "2024年3月期" or "2024年3月"
+    period_type = Column(String, default="")         # 'annual' / 'monthly' / '' (未判定)
+    fiscal_year = Column(String, default="")         # 月次データの場合、所属する会計年度（例: "2024年3月期"）
     revenue = Column(Float, default=0)               # 売上高
     cost_of_sales = Column(Float, default=0)         # 売上原価
     gross_profit = Column(Float, default=0)          # 売上総利益
