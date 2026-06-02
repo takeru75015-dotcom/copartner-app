@@ -122,6 +122,29 @@ def normalize_to_seireki(period: str) -> str:
     s = re.sub(r"昭和\s*(\d{1,2})\s*年", _showa, s)
     s = re.sub(r"S\s*(\d{1,2})[\.\s年]", lambda m: f"{1925 + int(m.group(1))}年", s)
 
+    # 「YYYY年M月D日～YYYY年M月D日（第N期）」→「YYYY年M月期（第N期）」に短縮
+    # 終了側の年月だけ拾い、第N期があれば残す
+    range_pattern = re.compile(
+        r"\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日\s*[～~〜\-]\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*\d{1,2}\s*日(\s*（[^）]+）)?"
+    )
+    m = range_pattern.search(s)
+    if m:
+        end_year = m.group(1)
+        end_month = int(m.group(2))
+        suffix = m.group(3) or ""  # （第49期）等
+        s = range_pattern.sub(f"{end_year}年{end_month}月期{suffix}", s)
+
+    # 「YYYY年M月～YYYY年M月」（日なし）も対応
+    range_pattern_md = re.compile(
+        r"\d{4}\s*年\s*\d{1,2}\s*月\s*[～~〜\-]\s*(\d{4})\s*年\s*(\d{1,2})\s*月(\s*（[^）]+）)?"
+    )
+    m2 = range_pattern_md.search(s)
+    if m2:
+        end_year = m2.group(1)
+        end_month = int(m2.group(2))
+        suffix = m2.group(3) or ""
+        s = range_pattern_md.sub(f"{end_year}年{end_month}月期{suffix}", s)
+
     return s
 
 
