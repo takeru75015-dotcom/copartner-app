@@ -105,54 +105,105 @@
         })();
       </script>
 
-      <div class="border-top pt-3 mt-3">
-        <div class="small fw-semibold mb-2"><i class="fas fa-file-upload me-1 text-primary"></i>補足資料 PDF / 画像 をアップロード（会社概要・事業計画・KPI・<strong>顧客別売上</strong>・<strong>商品別売上</strong>・<strong>事業部別資料</strong> 等）</div>
-        <div class="small text-muted mb-2">
-          PDF・PNG・JPG 対応。AIが自動で事業構成テキストに追記します。<br>
-          <strong>🆕 複数ファイル同時選択OK</strong>（Ctrl/⌘押しながら選択、または Shift で範囲選択）。順番に AI で読み取り。
-        </div>
-        <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data" class="d-flex gap-2 align-items-end"
+    </div>
+  </div>
+</div>
+
+{# ===== 🆕 3つの独立アップロードカード（常時表示） ===== #}
+<div class="row g-3 mb-4">
+  <!-- 1. 決算書（年次） -->
+  <div class="col-lg-4">
+    <div class="card h-100" style="border-top:4px solid #1a237e;">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="fas fa-file-invoice me-1" style="color:#1a237e;"></i>① 決算書（年次）</h6>
+        <details class="mb-2">
+          <summary class="small text-muted" style="cursor:pointer;">説明を見る</summary>
+          <div class="small text-muted mt-1">
+            PDF / Excel 対応。複数年度の決算書・残高試算表など。AIが自動で売上・原価・販管費・B/S 等を抽出します。
+          </div>
+        </details>
+        <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
+          <input type="file" name="files" id="pdfFiles" class="form-control form-control-sm mb-2" accept=".pdf,.xlsx,.xlsm,.xls" multiple required>
+          <button type="submit" class="btn btn-primary btn-sm w-100" style="background:#1a237e;border-color:#1a237e;">
+            <i class="fas fa-brain me-1"></i>AI で読取
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 月次データ -->
+  <div class="col-lg-4">
+    <div class="card h-100" style="border-top:4px solid #2563eb;">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="fas fa-chart-line me-1" style="color:#2563eb;"></i>② 月次データ・比較推移表</h6>
+        <details class="mb-2">
+          <summary class="small text-muted" style="cursor:pointer;">説明を見る</summary>
+          <div class="small text-muted mt-1">
+            「比較損益推移表」「月次推移表」等のPDFをアップロードすると、<strong>12ヶ月分の月次データを一括抽出</strong>。月次グラフが自動表示されます。ファイル名に「月次・推移・比較損益」を含めると自動判定。
+          </div>
+        </details>
+        <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
+          <input type="file" name="files" class="form-control form-control-sm mb-2" accept=".pdf" multiple required>
+          <button type="submit" class="btn btn-sm w-100" style="background:#2563eb;border-color:#2563eb;color:#fff;">
+            <i class="fas fa-magic me-1"></i>月次抽出
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 元帳・補足資料 -->
+  <div class="col-lg-4">
+    <div class="card h-100" style="border-top:4px solid #d97706;">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="fas fa-book me-1" style="color:#d97706;"></i>③ 元帳・台帳・補足資料</h6>
+        <details class="mb-2">
+          <summary class="small text-muted" style="cursor:pointer;">説明を見る</summary>
+          <div class="small text-muted mt-1">
+            総勘定元帳・固定資産台帳・補助元帳・会社概要・事業計画・KPI・事業部別資料 等を AI が読み取り、社長への質問の多くを自動で埋めます。
+          </div>
+        </details>
+
+        <details class="mb-2" style="border:1px solid #fef3c7;border-radius:4px;padding:6px 10px;background:#fffbeb;">
+          <summary class="small fw-semibold" style="color:#854d0e;cursor:pointer;">📒 元帳・台帳（種類別アップ）</summary>
+          <div class="mt-2 d-flex flex-column gap-2">
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="ledger">
+              <div class="small mb-1">📒 総勘定元帳</div>
+              <div class="d-flex gap-1">
+                <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
+                <button class="btn btn-warning btn-sm flex-shrink-0" title="読取&追記"><i class="fas fa-magic"></i></button>
+              </div>
+            </form>
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="fixed_assets">
+              <div class="small mb-1">🏗 固定資産台帳</div>
+              <div class="d-flex gap-1">
+                <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
+                <button class="btn btn-warning btn-sm flex-shrink-0" title="読取&追記"><i class="fas fa-magic"></i></button>
+              </div>
+            </form>
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="aux_ledger">
+              <div class="small mb-1">📋 補助元帳(売掛/買掛/借入)</div>
+              <div class="d-flex gap-1">
+                <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
+                <button class="btn btn-warning btn-sm flex-shrink-0" title="読取&追記"><i class="fas fa-magic"></i></button>
+              </div>
+            </form>
+          </div>
+        </details>
+
+        <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data"
               onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('.upload-spinner').classList.remove('d-none');">
-          <input type="file" name="files" multiple class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" required>
-          <button type="submit" class="btn btn-outline-primary btn-sm flex-shrink-0">
+          <div class="small fw-semibold mb-1">📎 その他 補足資料（会社概要・事業部別資料 等）</div>
+          <input type="file" name="files" multiple class="form-control form-control-sm mb-2" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" required>
+          <button type="submit" class="btn btn-sm w-100" style="background:#d97706;border-color:#d97706;color:#fff;">
             <i class="fas fa-magic me-1"></i>AIで読取＆追記
             <span class="spinner-border spinner-border-sm ms-2 upload-spinner d-none" role="status"></span>
           </button>
         </form>
-      </div>
-
-      {# 北村先生FB#4対応：元帳・固定資産台帳・補助元帳 #}
-      <div class="border-top pt-3 mt-3" style="background:#fef9c3;border-radius:8px;padding:14px;margin:14px -14px -14px;">
-        <div class="small fw-semibold mb-2" style="color:#854d0e;"><i class="fas fa-book me-1"></i>元帳・台帳のアップロード（ヒアリング質問を自動回答化）</div>
-        <div class="small text-muted mb-3">総勘定元帳・固定資産台帳・補助元帳を AI が読み取り、社長への質問の多くを自動で埋めます（北村先生FB対応）。</div>
-
-        <div class="row g-2">
-          <div class="col-md-4">
-            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
-              <input type="hidden" name="doc_type" value="ledger">
-              <div class="small fw-semibold mb-1" style="color:#92400e;">📒 総勘定元帳</div>
-              <input type="file" name="file" class="form-control form-control-sm mb-2" accept=".pdf" required>
-              <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fas fa-magic me-1"></i>読取＆追記</button>
-            </form>
-          </div>
-          <div class="col-md-4">
-            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
-              <input type="hidden" name="doc_type" value="fixed_assets">
-              <div class="small fw-semibold mb-1" style="color:#92400e;">🏗 固定資産台帳</div>
-              <input type="file" name="file" class="form-control form-control-sm mb-2" accept=".pdf" required>
-              <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fas fa-magic me-1"></i>読取＆追記</button>
-            </form>
-          </div>
-          <div class="col-md-4">
-            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
-              <input type="hidden" name="doc_type" value="aux_ledger">
-              <div class="small fw-semibold mb-1" style="color:#92400e;">📋 補助元帳（売掛/買掛/借入）</div>
-              <input type="file" name="file" class="form-control form-control-sm mb-2" accept=".pdf" required>
-              <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fas fa-magic me-1"></i>読取＆追記</button>
-            </form>
-          </div>
-        </div>
-        <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>読み取った内容は事業構成テキストに追記され、次回 AI 分析時にコンテキストとして自動反映されます。</div>
       </div>
     </div>
   </div>
@@ -198,28 +249,6 @@
   </div>
 </div>
 {% endif %}
-
-<!-- PDFアップロード（メイン） -->
-<div class="card mb-4" style="border: 2px dashed #3b82f6;">
-  <div class="card-body text-center py-4">
-    <i class="fas fa-file-upload fa-3x mb-3" style="color:#3b82f6;"></i>
-    <h5 class="fw-bold mb-1">決算書をアップロード（PDF / Excel対応）</h5>
-    <p class="text-muted small mb-3">
-      複数年分を一度にアップ可能。PDF決算書・月次推移Excel・残高試算表 等、AIが自動で数値を読み取ります。<br>
-      <strong style="color:#2563eb;">🆕 ファイル名に「月次・推移・比較損益」が含まれるPDF</strong> をアップロードすると、
-      <strong>月次データを12ヶ月分まとめて自動抽出</strong>し、月次グラフが表示されます。
-    </p>
-    <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
-      <div class="mb-3">
-        <input type="file" name="files" id="pdfFiles" class="form-control" accept=".pdf,.xlsx,.xlsm,.xls" multiple required>
-        <div class="form-text">複数選択OK（Ctrl/Cmdを押しながらクリック）</div>
-      </div>
-      <button type="submit" class="btn btn-primary btn-lg px-5" style="background:#1a237e;border-color:#1a237e;">
-        <i class="fas fa-brain me-2"></i>AIで読み取って分析
-      </button>
-    </form>
-  </div>
-</div>
 
 <!-- 手入力（折りたたみ） -->
 <div class="accordion mb-4" id="manualInputAccordion">
