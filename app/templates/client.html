@@ -21,7 +21,22 @@
             <span class="text-muted fw-normal ms-1">— クリックで展開</span>
           </summary>
           <div class="mt-2" style="white-space: pre-wrap; font-size: .9rem;">{{ client.business_details }}</div>
+          <div class="mt-3 pt-2" style="border-top:1px dashed #cbd5e1;">
+            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#clientEdit"
+                    onclick="setTimeout(function(){var el=document.getElementById('clientEdit');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}}, 250);">
+              <i class="fas fa-pen me-1"></i>この内容を編集する
+            </button>
+            <span class="small text-muted ms-2">業種・URL・メモ・事業構成テキストをまとめて編集</span>
+          </div>
         </details>
+        {% else %}
+        <div class="mt-2 small">
+          <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#clientEdit"
+                  onclick="setTimeout(function(){var el=document.getElementById('clientEdit');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}}, 250);">
+            <i class="fas fa-plus me-1"></i>事業構成・URL を追加
+          </button>
+          <span class="text-muted ms-2">社長へのヒアリング情報を入れると分析精度UP</span>
+        </div>
         {% endif %}
       </div>
       <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#clientEdit">
