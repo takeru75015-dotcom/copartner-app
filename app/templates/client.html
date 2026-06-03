@@ -352,9 +352,16 @@
 
 <!-- 過去データ一覧 -->
 {% if financials %}
+{% set annual_fds = financials | rejectattr('period_type','equalto','monthly') | list %}
+{% set monthly_fds = financials | selectattr('period_type','equalto','monthly') | list %}
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#f1f5ff;">
-    <span class="fw-bold"><i class="fas fa-history me-2" style="color:#1a237e;"></i>登録済みの期データ（{{ financials|length }}件）</span>
+    <span class="fw-bold">
+      <i class="fas fa-history me-2" style="color:#1a237e;"></i>登録済みの期データ
+      <span class="small fw-normal text-muted">
+        年次 {{ annual_fds|length }}件{% if monthly_fds %} / 月次 {{ monthly_fds|length }}件{% endif %}
+      </span>
+    </span>
     <div class="d-flex gap-2 flex-wrap">
       <form method="post" action="/clients/{{ client.id }}/recalc-from-breakdown" class="d-inline" onsubmit="return confirm('内訳データから在庫・売掛・現金・有利子負債を再計算します。よろしいですか？');">
         <button type="submit" class="btn btn-sm btn-outline-info">
@@ -398,7 +405,8 @@
   </div>
 
   <div class="list-group list-group-flush">
-    {% for fd in financials %}
+    {# 年次データのみメイン表示 #}
+    {% for fd in annual_fds %}
     {% set is_thin = (not fd.revenue) or (not fd.cost_of_sales and not fd.selling_expenses) %}
     {% set ptype = fd.period_type or '' %}
     <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 {% if is_thin %}bg-light{% endif %}">
@@ -407,8 +415,7 @@
                data-period-type="{{ ptype }}" onchange="updateBulkCount()" style="cursor:pointer;">
         <div>
           <span class="fw-semibold">{{ fd.period }}</span>
-          {% if ptype == 'monthly' %}<span class="badge bg-info text-white ms-1 small">月次</span>
-          {% elif ptype == 'annual' %}<span class="badge bg-secondary ms-1 small">年次</span>{% endif %}
+          <span class="badge bg-secondary ms-1 small">年次</span>
           {% if is_thin %}<span class="badge bg-warning text-dark ms-1 small">⚠️ データ不足</span>{% endif %}
           <div class="text-muted small mt-1">
             売上: {{ "{:,.0f}".format(fd.revenue or 0) }}万 /
@@ -451,6 +458,45 @@
     </div>
     {% endfor %}
   </div>
+
+  {# 月次データ（折りたたみで隠す） #}
+  {% if monthly_fds %}
+  <details style="border-top:2px solid #fef3c7;background:#fffbeb;">
+    <summary class="px-3 py-2 small fw-bold" style="color:#854d0e;cursor:pointer;">
+      <i class="fas fa-calendar-alt me-1"></i>月次データ {{ monthly_fds|length }}件（クリックで展開）
+      <span class="fw-normal text-muted ms-1">— 月次推移グラフで使用中。一覧表示は省略してます</span>
+    </summary>
+    <div class="list-group list-group-flush" style="max-height:400px;overflow-y:auto;">
+      {% for fd in monthly_fds %}
+      {% set is_thin = (not fd.revenue) or (not fd.cost_of_sales and not fd.selling_expenses) %}
+      <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+        <div class="d-flex align-items-center gap-2 flex-grow-1">
+          <input type="checkbox" class="form-check-input fd-checkbox m-0" value="{{ fd.id }}"
+                 data-period-type="monthly" onchange="updateBulkCount()" style="cursor:pointer;">
+          <div>
+            <span class="fw-semibold small">{{ fd.period }}</span>
+            <span class="badge bg-info text-white ms-1" style="font-size:.65rem;">月次</span>
+            <div class="text-muted" style="font-size:.75rem;">
+              売上 {{ "{:,.0f}".format(fd.revenue or 0) }} / 営利 {{ "{:,.0f}".format(fd.operating_profit or 0) }}
+            </div>
+          </div>
+        </div>
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <form method="post" action="/financials/{{ fd.id }}/delete" class="m-0"
+                    onsubmit='return confirm("「" + {{ fd.period|tojson }} + "」のデータを削除します。よろしいですか？");'>
+                <button type="submit" class="dropdown-item text-danger small"><i class="fas fa-trash me-1"></i>削除</button>
+              </form>
+            </li>
+          </ul>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 </div>
 {% endif %}
 

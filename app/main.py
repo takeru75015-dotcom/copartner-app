@@ -568,19 +568,29 @@ async def upload_business_context(client_id: int, request: Request,
     )
 
 def _check_data_quality(financials: list) -> list:
-    """登録された財務データの品質をチェックし、警告メッセージのリストを返す"""
+    """登録された財務データの品質をチェックし、警告メッセージのリストを返す
+    🌟 月次データは品質チェック対象外（年次データのみで判定）
+    """
     issues = []
     if not financials:
         return issues
 
-    # 1. 期数異常（月次・年次混在の疑い）
-    if len(financials) > 12:
+    # 月次データは除外して年次データのみでチェック
+    annual_fds = [f for f in financials if (getattr(f, "period_type", "") or "") != "monthly"]
+    if not annual_fds:
+        return issues
+
+    # 1. 期数異常（年次が多すぎる場合のみ。月次は集約されるので除外）
+    if len(annual_fds) > 12:
         issues.append({
             "severity": "high",
-            "title": f"⚠️ {len(financials)}期のデータが登録されています",
-            "message": "月次データと年次決算が混在している可能性が高いです。普通の中小企業なら 5-10 期程度になるはずです。",
-            "action": "🗑️【全期リセット】で全部削除した後、**年次決算（PL推移表・残高試算表など）のみ**を再アップロードしてください。月次推移ファイルは「12ヶ月→1期」に自動集約されます。",
+            "title": f"⚠️ {len(annual_fds)}期分の年次データが登録されています",
+            "message": "年次データが多すぎる可能性。普通の中小企業なら 5-10 期程度になるはずです。",
+            "action": "重複期がないか確認し、🗑️で個別削除するか、🧹【重複期を整理】で自動マージしてください。",
         })
+
+    # 以降のチェックも annual_fds で行う
+    financials = annual_fds
 
     # 2. 部分データ（データ不足の期がある）
     thin_count = sum(1 for f in financials if not f.revenue or (not f.cost_of_sales and not f.selling_expenses))
