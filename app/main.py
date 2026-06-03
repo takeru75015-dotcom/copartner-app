@@ -331,6 +331,36 @@ def recalc_from_breakdown(client_id: int, request: Request, db: Session = Depend
     return RedirectResponse(f"/clients/{client_id}?msg={msg}", status_code=302)
 
 
+@app.post("/clients/{client_id}/bulk-delete-financials")
+def bulk_delete_financials(client_id: int, request: Request,
+                            fd_ids: str = Form(""),
+                            db: Session = Depends(get_db)):
+    """指定された複数のfd_idを一括削除（チェックボックス選択用）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    cl = db.query(Client).filter(Client.id == client_id, Client.user_id == user.id).first()
+    if not cl:
+        return RedirectResponse("/dashboard", status_code=302)
+    ids = [int(i) for i in (fd_ids or "").split(",") if i.strip().isdigit()]
+    if not ids:
+        return RedirectResponse(f"/clients/{client_id}?err=削除対象が選択されていません", status_code=302)
+    # IDOR対策: client_id でも絞る
+    fds = db.query(FinancialData).filter(
+        FinancialData.id.in_(ids),
+        FinancialData.client_id == client_id
+    ).all()
+    cnt = len(fds)
+    # Analysis（外部キー）も削除
+    fd_id_list = [f.id for f in fds]
+    if fd_id_list:
+        db.query(Analysis).filter(Analysis.financial_data_id.in_(fd_id_list)).delete(synchronize_session=False)
+    for fd in fds:
+        db.delete(fd)
+    db.commit()
+    return RedirectResponse(f"/clients/{client_id}?msg={cnt}件のデータを削除しました", status_code=302)
+
+
 @app.post("/clients/{client_id}/reset-financials")
 def reset_client_financials(client_id: int, request: Request, db: Session = Depends(get_db)):
     """このクライアントの全期データを一括削除（汚いデータをリセットして再アップロード用）"""

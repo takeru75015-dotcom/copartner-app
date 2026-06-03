@@ -305,18 +305,44 @@
       {% endif %}
     </div>
   </div>
+
+  {# 🆕 一括選択ツールバー #}
+  <div class="px-3 py-2 d-flex gap-2 align-items-center flex-wrap" style="background:#fffbeb;border-bottom:1px solid #fef3c7;">
+    <span class="small fw-bold" style="color:#92400e;"><i class="fas fa-check-square me-1"></i>一括操作:</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('all')">全選択</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('monthly')">月次のみ選択</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('annual')">年次のみ選択</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('none')">選択解除</button>
+    <span class="small text-muted ms-2" id="bulk_count">0件選択</span>
+    <form method="post" action="/clients/{{ client.id }}/bulk-delete-financials" id="bulk_delete_form"
+          class="ms-auto d-inline"
+          onsubmit="var n = document.querySelectorAll('.fd-checkbox:checked').length; if(n===0){alert('1件以上選択してください');return false;} return confirm(n + '件のデータを削除します。元に戻せません。よろしいですか？');">
+      <input type="hidden" name="fd_ids" id="bulk_fd_ids" value="">
+      <button type="submit" class="btn btn-sm btn-danger" id="bulk_delete_btn" disabled>
+        <i class="fas fa-trash me-1"></i>選択した期を一括削除
+      </button>
+    </form>
+  </div>
+
   <div class="list-group list-group-flush">
     {% for fd in financials %}
     {% set is_thin = (not fd.revenue) or (not fd.cost_of_sales and not fd.selling_expenses) %}
+    {% set ptype = fd.period_type or '' %}
     <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 {% if is_thin %}bg-light{% endif %}">
-      <div>
-        <span class="fw-semibold">{{ fd.period }}</span>
-        {% if is_thin %}<span class="badge bg-warning text-dark ms-2 small">⚠️ データ不足</span>{% endif %}
-        <div class="text-muted small mt-1">
-          売上: {{ "{:,.0f}".format(fd.revenue or 0) }}万 /
-          原価: {{ "{:,.0f}".format(fd.cost_of_sales or 0) }}万 /
-          販管費: {{ "{:,.0f}".format(fd.selling_expenses or 0) }}万 /
-          営業利益: {{ "{:,.0f}".format(fd.operating_profit or 0) }}万
+      <div class="d-flex align-items-center gap-2 flex-grow-1">
+        <input type="checkbox" class="form-check-input fd-checkbox m-0" value="{{ fd.id }}"
+               data-period-type="{{ ptype }}" onchange="updateBulkCount()" style="cursor:pointer;">
+        <div>
+          <span class="fw-semibold">{{ fd.period }}</span>
+          {% if ptype == 'monthly' %}<span class="badge bg-info text-white ms-1 small">月次</span>
+          {% elif ptype == 'annual' %}<span class="badge bg-secondary ms-1 small">年次</span>{% endif %}
+          {% if is_thin %}<span class="badge bg-warning text-dark ms-1 small">⚠️ データ不足</span>{% endif %}
+          <div class="text-muted small mt-1">
+            売上: {{ "{:,.0f}".format(fd.revenue or 0) }}万 /
+            原価: {{ "{:,.0f}".format(fd.cost_of_sales or 0) }}万 /
+            販管費: {{ "{:,.0f}".format(fd.selling_expenses or 0) }}万 /
+            営業利益: {{ "{:,.0f}".format(fd.operating_profit or 0) }}万
+          </div>
         </div>
       </div>
       <div class="d-flex gap-2 align-items-center">
@@ -347,6 +373,27 @@
 
 {% block scripts %}
 <script>
+// === 一括選択ロジック ===
+function bulkSelect(mode) {
+  const checkboxes = document.querySelectorAll('.fd-checkbox');
+  checkboxes.forEach(cb => {
+    const pt = cb.dataset.periodType || '';
+    if (mode === 'all') cb.checked = true;
+    else if (mode === 'none') cb.checked = false;
+    else if (mode === 'monthly') cb.checked = (pt === 'monthly');
+    else if (mode === 'annual') cb.checked = (pt === 'annual' || pt === '');
+  });
+  updateBulkCount();
+}
+
+function updateBulkCount() {
+  const checked = document.querySelectorAll('.fd-checkbox:checked');
+  const ids = Array.from(checked).map(cb => cb.value);
+  document.getElementById('bulk_count').textContent = `${ids.length}件選択`;
+  document.getElementById('bulk_fd_ids').value = ids.join(',');
+  document.getElementById('bulk_delete_btn').disabled = (ids.length === 0);
+}
+
 // ファイル選択時にファイル名を表示
 document.getElementById('pdfFiles').addEventListener('change', function() {
   const files = this.files;
