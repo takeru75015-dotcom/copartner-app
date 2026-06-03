@@ -15,10 +15,13 @@
           {% if client.note %}&nbsp;|&nbsp; {{ client.note }}{% endif %}
         </p>
         {% if client.business_details %}
-        <div class="mt-2 p-2" style="background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;">
-          <div class="small text-muted mb-1"><i class="fas fa-info-circle me-1"></i>事業構成（ヒアリング情報）</div>
-          <div style="white-space: pre-wrap; font-size: .9rem;">{{ client.business_details }}</div>
-        </div>
+        <details class="mt-2" style="background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;padding:8px 12px;">
+          <summary class="small text-muted" style="cursor:pointer;font-weight:600;">
+            <i class="fas fa-info-circle me-1"></i>事業構成（ヒアリング情報）
+            <span class="text-muted fw-normal ms-1">— クリックで展開</span>
+          </summary>
+          <div class="mt-2" style="white-space: pre-wrap; font-size: .9rem;">{{ client.business_details }}</div>
+        </details>
         {% endif %}
       </div>
       <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#clientEdit">
@@ -165,9 +168,9 @@
           </div>
         </details>
 
-        <details class="mb-2" style="border:1px solid #fef3c7;border-radius:4px;padding:6px 10px;background:#fffbeb;">
-          <summary class="small fw-semibold" style="color:#854d0e;cursor:pointer;">📒 元帳・台帳（種類別アップ）</summary>
-          <div class="mt-2 d-flex flex-column gap-2">
+        <div class="mb-2 p-2" style="border:1px solid #fef3c7;border-radius:4px;background:#fffbeb;">
+          <div class="small fw-semibold mb-2" style="color:#854d0e;">📒 元帳・台帳（種類別アップ）</div>
+          <div class="d-flex flex-column gap-2">
             <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
               <input type="hidden" name="doc_type" value="ledger">
               <div class="small mb-1">📒 総勘定元帳</div>
@@ -193,7 +196,7 @@
               </div>
             </form>
           </div>
-        </details>
+        </div>
 
         <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data"
               onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('.upload-spinner').classList.remove('d-none');">
