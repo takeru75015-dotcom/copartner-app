@@ -250,42 +250,6 @@
 {# ========== タブ1：財務概要 ========== #}
 <div class="cp-tab-panel active" id="panel-overview">
 
-  {# 📈 月次グラフ（月次データ3件以上ある場合） #}
-  {% if monthly_chart_data and monthly_chart_data.count >= 3 %}
-  <div class="card p-3 mb-4">
-    <div class="fw-bold mb-2" style="color:#0F0F19;">
-      <i class="fas fa-chart-line me-2"></i>月次推移グラフ
-      <span class="small fw-normal text-muted ms-2">— 月次データ {{ monthly_chart_data.count }}件の推移</span>
-    </div>
-    <div style="position:relative;height:300px;">
-      <canvas id="monthlyTrendChart"></canvas>
-    </div>
-  </div>
-  <script>
-    (function(){
-      var ctx = document.getElementById('monthlyTrendChart');
-      if (!ctx || typeof Chart === 'undefined') return;
-      new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: {{ monthly_chart_data.labels | tojson }},
-          datasets: [
-            {label: '売上（万円）', data: {{ monthly_chart_data.revenue | tojson }}, borderColor: '#1a237e', backgroundColor: 'rgba(26,35,126,.1)', tension: .3, yAxisID: 'y'},
-            {label: '営業利益（万円）', data: {{ monthly_chart_data.operating_profit | tojson }}, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.1)', tension: .3, yAxisID: 'y'},
-            {label: '現預金（万円）', data: {{ monthly_chart_data.cash | tojson }}, borderColor: '#E60039', backgroundColor: 'rgba(230,0,57,.1)', borderDash:[5,3], tension: .3, yAxisID: 'y'}
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          interaction: {mode: 'index', intersect: false},
-          plugins: {legend: {position: 'bottom'}, tooltip: {callbacks: {label: function(c){return c.dataset.label + ': ' + c.parsed.y.toLocaleString() + '万円';}}}},
-          scales: {y: {beginAtZero: false, ticks: {callback: function(v){return v.toLocaleString();}}}}
-        }
-      });
-    })();
-  </script>
-  {% endif %}
-
   {# 🌟 月次優先インジケータ #}
   {% if aggregation_meta and aggregation_meta.aggregated_count and aggregation_meta.aggregated_count > 0 %}
   <div class="alert mb-3" style="background:linear-gradient(90deg,#eff6ff,#dbeafe);border-left:4px solid #2563eb;color:#1e3a8a;">
@@ -589,6 +553,51 @@
       </div>
     </div>
   </div>
+  {% endif %}
+
+  {# 📈 月次推移グラフ（月次データ3件以上ある場合） — 売上 vs 費用構造・営業利益推移の下に配置 #}
+  {% if monthly_chart_data and monthly_chart_data.count >= 3 %}
+  <div class="card p-3 mb-4">
+    <div class="fw-bold mb-2" style="color:#0F0F19;">
+      <i class="fas fa-chart-line me-2"></i>月次推移グラフ
+      <span class="small fw-normal text-muted ms-2">— 月次データ {{ monthly_chart_data.count }}件の推移</span>
+    </div>
+    <div style="position:relative;height:320px;">
+      <canvas id="monthlyTrendChart"></canvas>
+    </div>
+    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>季節性・月別の好不調を把握できます。月次データのアップロードで自動表示。</div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var ctx = document.getElementById('monthlyTrendChart');
+      if (!ctx || typeof Chart === 'undefined') return;
+      try {
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: {{ monthly_chart_data.labels | tojson }},
+            datasets: [
+              {label: '売上（万円）', data: {{ monthly_chart_data.revenue | tojson }}, borderColor: '#1a237e', backgroundColor: 'rgba(26,35,126,.1)', tension: .3, yAxisID: 'y'},
+              {label: '営業利益（万円）', data: {{ monthly_chart_data.operating_profit | tojson }}, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.1)', tension: .3, yAxisID: 'y'},
+              {label: '現預金（万円）', data: {{ monthly_chart_data.cash | tojson }}, borderColor: '#E60039', backgroundColor: 'rgba(230,0,57,.1)', borderDash:[5,3], tension: .3, yAxisID: 'y'}
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: {mode: 'index', intersect: false},
+            plugins: {
+              legend: {position: 'bottom'},
+              tooltip: {callbacks: {label: function(c){return c.dataset.label + ': ' + (c.parsed.y || 0).toLocaleString() + '万円';}}}
+            },
+            scales: {
+              y: {beginAtZero: false, ticks: {callback: function(v){return v.toLocaleString();}}},
+              x: {ticks: {maxRotation: 45, minRotation: 30, autoSkip: true, maxTicksLimit: 24}}
+            }
+          }
+        });
+      } catch(e) { console.error('monthlyTrendChart error:', e); }
+    });
+  </script>
   {% endif %}
 
   {# ========== BSサマリー ========== #}
