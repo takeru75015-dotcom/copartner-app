@@ -204,7 +204,11 @@
   <div class="card-body text-center py-4">
     <i class="fas fa-file-upload fa-3x mb-3" style="color:#3b82f6;"></i>
     <h5 class="fw-bold mb-1">決算書をアップロード（PDF / Excel対応）</h5>
-    <p class="text-muted small mb-3">複数年分を一度にアップ可能。PDF決算書・月次推移Excel・残高試算表 等、AIが自動で数値を読み取ります。</p>
+    <p class="text-muted small mb-3">
+      複数年分を一度にアップ可能。PDF決算書・月次推移Excel・残高試算表 等、AIが自動で数値を読み取ります。<br>
+      <strong style="color:#2563eb;">🆕 ファイル名に「月次・推移・比較損益」が含まれるPDF</strong> をアップロードすると、
+      <strong>月次データを12ヶ月分まとめて自動抽出</strong>し、月次グラフが表示されます。
+    </p>
     <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
       <div class="mb-3">
         <input type="file" name="files" id="pdfFiles" class="form-control" accept=".pdf,.xlsx,.xlsm,.xls" multiple required>

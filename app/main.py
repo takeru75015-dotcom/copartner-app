@@ -833,6 +833,52 @@ async def upload_pdf(client_id: int, request: Request,
                     saved_ids.append(fid)
                 continue
 
+            # 🆕 月次推移表PDF 自動判定 → 月次抽出モード
+            from .services.monthly_extractor import is_monthly_trend_file, extract_monthly_from_pdf, _guess_fiscal_year_from_filename
+            if is_monthly_trend_file(file.filename) and AI_PROVIDER == "claude":
+                try:
+                    fy_label = _guess_fiscal_year_from_filename(file.filename)
+                    mres = extract_monthly_from_pdf(content, file.filename, fy_label)
+                    months = mres.get("months") or []
+                    if not months:
+                        errors.append(f"{file.filename}: 月次データを抽出できませんでした（{mres.get('error') or '原因不明'}）")
+                        continue
+                    fy = mres.get("fiscal_year") or fy_label or ""
+                    m_saved = 0
+                    m_skipped = 0
+                    for m in months:
+                        ml = m.get("month_label", "")
+                        rev = m.get("revenue") or 0
+                        if not ml or rev == 0:
+                            continue
+                        # 既存重複チェック
+                        existing_m = db.query(FinancialData).filter(
+                            FinancialData.client_id == client_id,
+                            FinancialData.period == ml
+                        ).first()
+                        if existing_m:
+                            m_skipped += 1
+                            continue
+                        mfd = FinancialData(
+                            client_id=client_id,
+                            period=ml, period_type="monthly", fiscal_year=fy,
+                            revenue=rev,
+                            cost_of_sales=m.get("cost_of_sales") or 0,
+                            gross_profit=m.get("gross_profit") or 0,
+                            selling_expenses=m.get("selling_expenses") or 0,
+                            operating_profit=m.get("operating_profit") or 0,
+                        )
+                        db.add(mfd); m_saved += 1
+                    db.commit()
+                    print(f"[月次抽出] {file.filename}: 保存{m_saved}件 / 既存skip{m_skipped}件 / fy={fy}", flush=True)
+                    if m_saved == 0 and m_skipped > 0:
+                        errors.append(f"{file.filename}: 月次{len(months)}件すべて既存と重複（skipped）")
+                    continue  # 月次抽出完了したので次のファイルへ
+                except Exception as me:
+                    print(f"[月次抽出] 失敗 {file.filename}: {me}", flush=True)
+                    errors.append(f"{file.filename}: 月次抽出失敗: {str(me)[:100]} → 通常のPDF抽出にフォールバック")
+                    # フォールバックして通常PDF抽出を試みる
+
             # PDF 分岐（既存）
             with pdfplumber.open(io.BytesIO(content)) as pdf:
                 text = "\n".join(p.extract_text() or "" for p in pdf.pages)
