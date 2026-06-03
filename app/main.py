@@ -947,6 +947,42 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
     except Exception:
         pass
 
+    # 月次集計＋月次グラフ用データを先に計算（キャッシュパスでも使うため）
+    _sorted = sorted(_all_fds_for_cf, key=lambda x: x.period or "")
+    _idx = next((i for i, x in enumerate(_sorted) if x.id == fd.id), None)
+    if _idx is None:
+        all_fds_for_client = [fd]
+    else:
+        all_fds_for_client = _sorted[: _idx + 1]
+
+    aggregation_meta = {"monthly_count": 0, "annual_count": 0, "aggregated_count": 0,
+                        "fiscal_years_with_monthly": [], "discrepancies_by_fy": {}}
+    monthly_chart_data = None
+    try:
+        from .services.monthly_aggregator import build_effective_historical_data
+        effective_fds, aggregation_meta = build_effective_historical_data(all_fds_for_client)
+        if aggregation_meta.get("aggregated_count", 0) > 0:
+            all_fds_for_client = effective_fds
+
+        monthly_fds_for_chart = [f for f in _sorted if getattr(f, "period_type", "") == "monthly"]
+        if len(monthly_fds_for_chart) >= 3:
+            import re as _re
+            def _key(f):
+                p = f.period or ""
+                y = _re.search(r"(\d{4})", p)
+                m = _re.search(r"年\s*(\d{1,2})\s*月", p) or _re.search(r"[/\-](\d{1,2})", p)
+                return (int(y.group(1)) if y else 0, int(m.group(1)) if m else 0)
+            monthly_fds_for_chart.sort(key=_key)
+            monthly_chart_data = {
+                "labels": [f.period for f in monthly_fds_for_chart],
+                "revenue": [round(f.revenue or 0, 1) for f in monthly_fds_for_chart],
+                "operating_profit": [round(f.operating_profit or 0, 1) for f in monthly_fds_for_chart],
+                "cash": [round(f.cash or 0, 1) for f in monthly_fds_for_chart],
+                "count": len(monthly_fds_for_chart),
+            }
+    except Exception as _e:
+        print(f"[月次集計] skip: {_e}", flush=True)
+
     existing = db.query(Analysis).filter(Analysis.financial_data_id == fd_id).order_by(Analysis.created_at.desc()).first()
     if existing:
         result = json.loads(existing.result_json)
@@ -975,50 +1011,6 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "analysis_id": existing.id, "cached": True,
             "dismissed_solutions": dismissed_sols,
         })
-
-    # 同じクライアントの"現在見ている期"までのデータを取得（未来データは入れない）
-    _all_fds = db.query(FinancialData).filter(
-        FinancialData.client_id == fd.client_id
-    ).all()
-    # period でソートして、現在のfdの位置を特定。それ以前（自身含む）のみ渡す
-    _sorted = sorted(_all_fds, key=lambda x: x.period or "")
-    _idx = next((i for i, x in enumerate(_sorted) if x.id == fd.id), None)
-    if _idx is None:
-        all_fds_for_client = [fd]
-    else:
-        all_fds_for_client = _sorted[: _idx + 1]
-
-    # 🔥 月次優先ロジック：月次データがあれば年度ごとに集計し、年次データを置き換える
-    aggregation_meta = {"monthly_count": 0, "annual_count": 0, "aggregated_count": 0,
-                        "fiscal_years_with_monthly": [], "discrepancies_by_fy": {}}
-    monthly_chart_data = None  # 月次グラフ用データ
-    try:
-        from .services.monthly_aggregator import build_effective_historical_data
-        effective_fds, aggregation_meta = build_effective_historical_data(all_fds_for_client)
-        if aggregation_meta.get("aggregated_count", 0) > 0:
-            all_fds_for_client = effective_fds
-            print(f"[月次優先] aggregated {aggregation_meta['aggregated_count']} fiscal years from "
-                  f"{aggregation_meta['monthly_count']} monthly records", flush=True)
-
-        # 月次グラフ用データ生成（月次データが3件以上ある場合）
-        monthly_fds_for_chart = [f for f in _sorted if getattr(f, "period_type", "") == "monthly"]
-        if len(monthly_fds_for_chart) >= 3:
-            import re as _re
-            def _key(f):
-                p = f.period or ""
-                y = _re.search(r"(\d{4})", p)
-                m = _re.search(r"年\s*(\d{1,2})\s*月", p) or _re.search(r"[/\-](\d{1,2})", p)
-                return (int(y.group(1)) if y else 0, int(m.group(1)) if m else 0)
-            monthly_fds_for_chart.sort(key=_key)
-            monthly_chart_data = {
-                "labels": [f.period for f in monthly_fds_for_chart],
-                "revenue": [round(f.revenue or 0, 1) for f in monthly_fds_for_chart],
-                "operating_profit": [round(f.operating_profit or 0, 1) for f in monthly_fds_for_chart],
-                "cash": [round(f.cash or 0, 1) for f in monthly_fds_for_chart],
-                "count": len(monthly_fds_for_chart),
-            }
-    except Exception as _e:
-        print(f"[月次優先] skip: {_e}", flush=True)
 
     try:
         # 保存されたヒアリング回答を business_details に追記（AI に文脈として渡す）
