@@ -654,13 +654,27 @@ def client_detail(client_id: int, request: Request, db: Session = Depends(get_db
     cl = db.query(Client).filter(Client.id == client_id, Client.user_id == user.id).first()
     if not cl:
         return RedirectResponse("/dashboard", status_code=302)
-    financials = db.query(FinancialData).filter(FinancialData.client_id == client_id).order_by(FinancialData.created_at.desc()).all()
+    # 並び順: 年次（新→旧）→ 月次（新→旧）。年次優先で表示。
+    _all = db.query(FinancialData).filter(FinancialData.client_id == client_id).all()
+    import re as _re_fd
+    def _sort_key(f):
+        pt = f.period_type or ""
+        is_monthly = 1 if pt == "monthly" else 0  # 月次は後（1）、年次は前（0）
+        p = f.period or ""
+        y = _re_fd.search(r"(\d{4})", p)
+        m = _re_fd.search(r"年\s*(\d{1,2})\s*月", p) or _re_fd.search(r"[/\-](\d{1,2})", p)
+        # 降順にしたいので負号
+        return (is_monthly, -(int(y.group(1)) if y else 0), -(int(m.group(1)) if m else 0))
+    financials = sorted(_all, key=_sort_key)
+    # 最新の年次データ（分析推奨）
+    latest_annual = next((f for f in financials if (f.period_type or "") != "monthly"), None)
     quality_issues = _check_data_quality(financials)
     msg = request.query_params.get("msg", "")
     error = request.query_params.get("error", "")
     return templates.TemplateResponse("client.html", {
         "request": request, "user": user, "client": cl,
-        "financials": financials, "quality_issues": quality_issues, "msg": msg, "error": error,
+        "financials": financials, "latest_annual": latest_annual,
+        "quality_issues": quality_issues, "msg": msg, "error": error,
     })
 
 @app.post("/clients/{client_id}/delete")
@@ -1049,12 +1063,61 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
                 m = _re.search(r"年\s*(\d{1,2})\s*月", p) or _re.search(r"[/\-](\d{1,2})", p)
                 return (int(y.group(1)) if y else 0, int(m.group(1)) if m else 0)
             monthly_fds_for_chart.sort(key=_key)
+
+            # ★ 年度別グルーピング（売上・営利の年度間比較用）
+            from collections import defaultdict
+            groups = defaultdict(dict)  # fy -> {month_num: {revenue, op}}
+            for f in monthly_fds_for_chart:
+                fy = getattr(f, "fiscal_year", "") or ""
+                mo = _re.search(r"年\s*(\d{1,2})\s*月", f.period or "")
+                if not mo:
+                    continue
+                m = int(mo.group(1))
+                groups[fy][m] = {
+                    "revenue": round(f.revenue or 0, 1),
+                    "op": round(f.operating_profit or 0, 1),
+                }
+
+            # 決算月を fiscal_year ラベルから推定（例: "2025年2月期" → 2）
+            close_month = 12
+            for fy in groups.keys():
+                mm = _re.search(r"(\d{1,2})\s*月期", fy or "")
+                if mm:
+                    close_month = int(mm.group(1))
+                    break
+
+            # X軸ラベル：決算月+1 から12ヶ月（例：決算月2なら 3,4,...,2）
+            x_months = []
+            for i in range(12):
+                m_val = ((close_month + i) % 12) + 1
+                x_months.append(f"{m_val}月")
+
+            # 各年度のシリーズデータ
+            revenue_series = []
+            op_series = []
+            for fy in sorted(groups.keys()):
+                rev_arr = []
+                op_arr = []
+                for i in range(12):
+                    m_val = ((close_month + i) % 12) + 1
+                    data = groups[fy].get(m_val) or {}
+                    rev_arr.append(data.get("revenue"))
+                    op_arr.append(data.get("op"))
+                revenue_series.append({"label": fy, "data": rev_arr})
+                op_series.append({"label": fy, "data": op_arr})
+
             monthly_chart_data = {
+                # 新形式: 年度別重ね折れ線用
+                "x_months": x_months,
+                "revenue_series": revenue_series,
+                "op_series": op_series,
+                # 旧形式: 後方互換（PDF用）
                 "labels": [f.period for f in monthly_fds_for_chart],
                 "revenue": [round(f.revenue or 0, 1) for f in monthly_fds_for_chart],
                 "operating_profit": [round(f.operating_profit or 0, 1) for f in monthly_fds_for_chart],
                 "cash": [round(f.cash or 0, 1) for f in monthly_fds_for_chart],
                 "count": len(monthly_fds_for_chart),
+                "fy_count": len(groups),
             }
     except Exception as _e:
         print(f"[月次集計] skip: {_e}", flush=True)

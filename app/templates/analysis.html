@@ -555,47 +555,76 @@
   </div>
   {% endif %}
 
-  {# 📈 月次推移グラフ（月次データ3件以上ある場合） — 売上 vs 費用構造・営業利益推移の下に配置 #}
+  {# 📈 月次推移グラフ（年度別重ね折れ線 — 売上左 / 営業利益右）#}
   {% if monthly_chart_data and monthly_chart_data.count >= 3 %}
   <div class="card p-3 mb-4">
     <div class="fw-bold mb-2" style="color:#0F0F19;">
-      <i class="fas fa-chart-line me-2"></i>月次推移グラフ
-      <span class="small fw-normal text-muted ms-2">— 月次データ {{ monthly_chart_data.count }}件の推移</span>
+      <i class="fas fa-chart-line me-2"></i>月次推移グラフ（年度別重ね）
+      <span class="small fw-normal text-muted ms-2">— {{ monthly_chart_data.fy_count or 0 }}年度分の月次データ {{ monthly_chart_data.count }}件</span>
     </div>
-    <div style="position:relative;height:320px;">
-      <canvas id="monthlyTrendChart"></canvas>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="small fw-bold mb-1" style="color:#1a237e;">📊 売上（万円）</div>
+        <div style="position:relative;height:280px;">
+          <canvas id="monthlyRevenueChart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="small fw-bold mb-1" style="color:#16a34a;">💰 営業利益（万円）</div>
+        <div style="position:relative;height:280px;">
+          <canvas id="monthlyOpChart"></canvas>
+        </div>
+      </div>
     </div>
-    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>季節性・月別の好不調を把握できます。月次データのアップロードで自動表示。</div>
+    <div class="small text-muted mt-2"><i class="fas fa-info-circle me-1"></i>各年度の同月を重ねて表示。X軸は会計年度の始月→決算月。年度間の季節性比較ができます。</div>
   </div>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      var ctx = document.getElementById('monthlyTrendChart');
-      if (!ctx || typeof Chart === 'undefined') return;
-      try {
-        new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: {{ monthly_chart_data.labels | tojson }},
-            datasets: [
-              {label: '売上（万円）', data: {{ monthly_chart_data.revenue | tojson }}, borderColor: '#1a237e', backgroundColor: 'rgba(26,35,126,.1)', tension: .3, yAxisID: 'y'},
-              {label: '営業利益（万円）', data: {{ monthly_chart_data.operating_profit | tojson }}, borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.1)', tension: .3, yAxisID: 'y'},
-              {label: '現預金（万円）', data: {{ monthly_chart_data.cash | tojson }}, borderColor: '#E60039', backgroundColor: 'rgba(230,0,57,.1)', borderDash:[5,3], tension: .3, yAxisID: 'y'}
-            ]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: {mode: 'index', intersect: false},
-            plugins: {
-              legend: {position: 'bottom'},
-              tooltip: {callbacks: {label: function(c){return c.dataset.label + ': ' + (c.parsed.y || 0).toLocaleString() + '万円';}}}
-            },
-            scales: {
-              y: {beginAtZero: false, ticks: {callback: function(v){return v.toLocaleString();}}},
-              x: {ticks: {maxRotation: 45, minRotation: 30, autoSkip: true, maxTicksLimit: 24}}
-            }
-          }
+      if (typeof Chart === 'undefined') return;
+      var xMonths = {{ (monthly_chart_data.x_months or [])|tojson }};
+      var revSeries = {{ (monthly_chart_data.revenue_series or [])|tojson }};
+      var opSeries = {{ (monthly_chart_data.op_series or [])|tojson }};
+      // 色パレット（年度別、順次）
+      var colors = [
+        {b:'#94a3b8', bg:'rgba(148,163,184,.08)'},  // 古い年度 - グレー
+        {b:'#2563eb', bg:'rgba(37,99,235,.08)'},    // 中間 - 青
+        {b:'#16a34a', bg:'rgba(22,163,74,.10)'},    // 最新 - 緑
+        {b:'#E60039', bg:'rgba(230,0,57,.08)'},     // 4年目以降 - 赤
+      ];
+
+      function buildDatasets(series) {
+        return series.map(function(s, i){
+          var c = colors[i] || colors[colors.length-1];
+          return {
+            label: s.label, data: s.data,
+            borderColor: c.b, backgroundColor: c.bg,
+            tension: .3, spanGaps: true,
+            borderWidth: i === series.length - 1 ? 3 : 2,
+          };
         });
-      } catch(e) { console.error('monthlyTrendChart error:', e); }
+      }
+
+      var commonOpts = {
+        responsive: true, maintainAspectRatio: false,
+        interaction: {mode: 'index', intersect: false},
+        plugins: {
+          legend: {position: 'bottom', labels: {boxWidth: 12, font:{size: 11}}},
+          tooltip: {callbacks: {label: function(c){return c.dataset.label + ': ' + (c.parsed.y == null ? '—' : c.parsed.y.toLocaleString()) + '万円';}}}
+        },
+        scales: {
+          y: {beginAtZero: true, ticks: {callback: function(v){return v.toLocaleString();}}},
+          x: {ticks: {font:{size:11}}}
+        }
+      };
+
+      try {
+        var rEl = document.getElementById('monthlyRevenueChart');
+        if (rEl && revSeries.length) new Chart(rEl, {type:'line', data:{labels:xMonths, datasets:buildDatasets(revSeries)}, options:commonOpts});
+      } catch(e) { console.error('monthlyRevenueChart error:', e); }
+      try {
+        var oEl = document.getElementById('monthlyOpChart');
+        if (oEl && opSeries.length) new Chart(oEl, {type:'line', data:{labels:xMonths, datasets:buildDatasets(opSeries)}, options:commonOpts});
+      } catch(e) { console.error('monthlyOpChart error:', e); }
     });
   </script>
   {% endif %}
