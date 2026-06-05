@@ -33,19 +33,9 @@ def migrate():
     _add_column(cursor, "users", "own_partners", "TEXT DEFAULT '{}'")
     # users.selected_books（参照する書籍IDのJSON配列）
     _add_column(cursor, "users", "selected_books", "TEXT DEFAULT '[]'")
-    # users.is_admin（運営管理者フラグ。登録では設定不可）
+    # users.is_admin（運営管理者フラグ。列追加のみ。自動付与はしない＝誤昇格/乗っ取り防止）
+    # 付与は運営が明示的に: python -m app.grant_admin <username>
     _add_column(cursor, "users", "is_admin", "INTEGER DEFAULT 0")
-    # 管理者の初期ブートストラップ: 「誰も管理者がいない場合のみ」最初に登録されたアカウント（最小ID）に付与。
-    # ※ユーザー名ベースの付与はしない（/register は任意ユーザー名を許すため乗っ取り可能）。
-    # ※既にDBに管理者がいる場合は何もしない（冪等・既存権限を尊重）。
-    try:
-        already = cursor.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0]
-        if not already:
-            cursor.execute("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)")
-            if cursor.rowcount:
-                print(f"  + bootstrapped is_admin on the first-registered account (lowest id)")
-    except sqlite3.OperationalError as e:
-        print(f"  ! is_admin bootstrap skip: {e}")
     # 既存ユーザーに referral_code を発番（空の場合）
     try:
         import secrets

@@ -116,10 +116,8 @@ def register(request: Request, username: str = Form(...), password: str = Form(.
              display_name: str = Form(""), db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username).first():
         return templates.TemplateResponse("register.html", {"request": request, "error": "このユーザー名は既に使われています"})
-    # 管理者ブートストラップ: まだ管理者が1人もいなければ、この最初のアカウントを管理者にする（初回インストール用）
-    is_first_admin = db.query(User).filter(User.is_admin == 1).count() == 0 and db.query(User).count() == 0
-    user = User(username=username, password_hash=hash_password(password), display_name=display_name,
-                is_admin=1 if is_first_admin else 0)
+    # 管理者権限は登録では付与しない（運営が `python -m app.grant_admin <username>` で明示付与）
+    user = User(username=username, password_hash=hash_password(password), display_name=display_name)
     db.add(user); db.commit()
     token = create_session_token(user.id)
     resp = RedirectResponse("/dashboard", status_code=302)
@@ -1955,20 +1953,15 @@ def _extract_text_from_upload(filename: str, raw: bytes) -> str:
         return ""
 
 
-# 追加の管理者ユーザー名。環境変数 COPARTNER_ADMIN_USERS（カンマ区切り）で明示指定したときのみ有効。
-# ※デフォルトは空。登録で乗っ取り可能な「既定ユーザー名」は持たない（権限は is_admin フラグが主）。
-ADMIN_USERNAMES = [u.strip() for u in os.environ.get("COPARTNER_ADMIN_USERS", "").split(",") if u.strip()]
 # アップロード上限（バイト）。環境変数 COPARTNER_BOOK_MAX_BYTES で上書き可（既定20MB）
 BOOK_MAX_BYTES = int(os.environ.get("COPARTNER_BOOK_MAX_BYTES", str(20 * 1024 * 1024)))
 
 
 def _is_admin(user) -> bool:
-    """運営管理者か。非クレーム可能な is_admin フラグが主。env指定ユーザー名は明示設定時のみ追加で許可。"""
-    if user is None:
-        return False
-    if getattr(user, "is_admin", 0) == 1:
-        return True
-    return getattr(user, "username", None) in ADMIN_USERNAMES
+    """運営管理者か。判定は非クレーム可能な is_admin フラグのみ。
+    付与は運営がサーバ上で `python -m app.grant_admin <username>` を実行して明示的に行う
+    （ユーザー名ベース・自動昇格は乗っ取り/誤昇格の余地があるため採用しない）。"""
+    return user is not None and getattr(user, "is_admin", 0) == 1
 
 
 @app.get("/admin/reference-books", response_class=HTMLResponse)
