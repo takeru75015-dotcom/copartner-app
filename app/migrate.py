@@ -31,6 +31,21 @@ def migrate():
     # users.excluded_categories（除外したいアフィカテゴリ）/ own_partners（自前提携先）
     _add_column(cursor, "users", "excluded_categories", "TEXT DEFAULT '[]'")
     _add_column(cursor, "users", "own_partners", "TEXT DEFAULT '{}'")
+    # users.selected_books（参照する書籍IDのJSON配列）
+    _add_column(cursor, "users", "selected_books", "TEXT DEFAULT '[]'")
+    # users.is_admin（運営管理者フラグ。登録では設定不可）
+    _add_column(cursor, "users", "is_admin", "INTEGER DEFAULT 0")
+    # 管理者の初期ブートストラップ: 「誰も管理者がいない場合のみ」最初に登録されたアカウント（最小ID）に付与。
+    # ※ユーザー名ベースの付与はしない（/register は任意ユーザー名を許すため乗っ取り可能）。
+    # ※既にDBに管理者がいる場合は何もしない（冪等・既存権限を尊重）。
+    try:
+        already = cursor.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0]
+        if not already:
+            cursor.execute("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)")
+            if cursor.rowcount:
+                print(f"  + bootstrapped is_admin on the first-registered account (lowest id)")
+    except sqlite3.OperationalError as e:
+        print(f"  ! is_admin bootstrap skip: {e}")
     # 既存ユーザーに referral_code を発番（空の場合）
     try:
         import secrets
@@ -131,6 +146,23 @@ def migrate():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_referral_services_category ON referral_services(category)")
     print("  = referral_services table ready")
+
+    # reference_books テーブル新規作成（書籍ナレッジDB）
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reference_books (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            author TEXT DEFAULT '',
+            publisher TEXT DEFAULT '',
+            processed_content TEXT DEFAULT '',
+            tags TEXT DEFAULT '[]',
+            license_status TEXT DEFAULT 'none',
+            is_active INTEGER DEFAULT 1,
+            uploaded_by_user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    print("  = reference_books table ready")
 
     conn.commit()
     conn.close()

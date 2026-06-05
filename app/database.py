@@ -16,6 +16,8 @@ class User(Base):
     referral_code = Column(String, default="", index=True)  # アフィ紹介ID（税理士ごとに発行）
     excluded_categories = Column(Text, default="[]")  # 除外したいアフィカテゴリのJSON配列（例：["法人保険","補助金代行"]）
     own_partners = Column(Text, default="{}")  # 自前で持ってる提携先 {カテゴリ: [{name, email, note}, ...]}
+    selected_books = Column(Text, default="[]")  # 参照する書籍IDのJSON配列（税理士が✔で選択）
+    is_admin = Column(Integer, default=0)  # 運営管理者フラグ（0/1）。登録では設定不可・DB/マイグレーションでのみ付与
     created_at = Column(DateTime, default=datetime.utcnow)
     clients = relationship("Client", back_populates="owner", cascade="all, delete-orphan")
 
@@ -107,6 +109,21 @@ class ReferralService(Base):
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# 📚 書籍ナレッジDB（管理側がアップロード／税理士が参照を選択）
+class ReferenceBook(Base):
+    __tablename__ = "reference_books"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)             # 書名
+    author = Column(String, default="")               # 著者
+    publisher = Column(String, default="")            # 出版社
+    processed_content = Column(Text, default="")      # 解析用に取り込んだ本文/要点テキスト
+    tags = Column(Text, default="[]")                 # JSON配列
+    license_status = Column(String, default="none")   # none / licensed（出版社許諾の有無）
+    is_active = Column(Integer, default=1)            # 0/1
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():

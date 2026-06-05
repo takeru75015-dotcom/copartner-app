@@ -1,5 +1,6 @@
 import json
 import hashlib
+import os
 from fastapi import FastAPI, Request, Form, Depends, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +14,7 @@ from urllib.parse import quote
 
 load_dotenv()
 
-from .database import init_db, get_db, User, Client, FinancialData, Analysis, ReferralService
+from .database import init_db, get_db, User, Client, FinancialData, Analysis, ReferralService, ReferenceBook
 from .auth import hash_password, verify_password, create_session_token, decode_session_token
 from .claude_client import (
     analyze_financials,
@@ -57,6 +58,13 @@ templates.env.filters["md5_short"] = _md5_short
 @app.on_event("startup")
 def startup():
     init_db()
+    # 既存DBに新カラム（selected_books / is_admin 等）を自動適用。
+    # ORMが全User SELECTで新カラムを参照するため、uvicorn起動だけでも no such column を防ぐ。
+    try:
+        from .migrate import migrate
+        migrate()
+    except Exception as e:
+        print(f"[startup] migrate skip: {e}", flush=True)
 
 # --- ヘルパー ---
 def get_session_from_request(request: Request):
@@ -108,7 +116,10 @@ def register(request: Request, username: str = Form(...), password: str = Form(.
              display_name: str = Form(""), db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username).first():
         return templates.TemplateResponse("register.html", {"request": request, "error": "このユーザー名は既に使われています"})
-    user = User(username=username, password_hash=hash_password(password), display_name=display_name)
+    # 管理者ブートストラップ: まだ管理者が1人もいなければ、この最初のアカウントを管理者にする（初回インストール用）
+    is_first_admin = db.query(User).filter(User.is_admin == 1).count() == 0 and db.query(User).count() == 0
+    user = User(username=username, password_hash=hash_password(password), display_name=display_name,
+                is_admin=1 if is_first_admin else 0)
     db.add(user); db.commit()
     token = create_session_token(user.id)
     resp = RedirectResponse("/dashboard", status_code=302)
@@ -1190,12 +1201,27 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             user_excluded = json.loads(getattr(user, "excluded_categories", "[]") or "[]")
         except Exception:
             user_excluded = []
+        # 📚 税理士が選択した参照書籍を読み込み
+        reference_books = []
+        try:
+            sel_ids = [int(x) for x in json.loads(getattr(user, "selected_books", "[]") or "[]")]
+        except Exception:
+            sel_ids = []
+        if sel_ids:
+            books = db.query(ReferenceBook).filter(
+                ReferenceBook.id.in_(sel_ids), ReferenceBook.is_active == 1
+            ).all()
+            reference_books = [
+                {"title": b.title, "author": b.author, "content": b.processed_content}
+                for b in books
+            ]
         result = analyze_financials(
             fd, cl.name, cl.industry,
             business_details=merged_bd,
             historical_data=all_fds_for_client if len(all_fds_for_client) > 1 else None,
             referral_code=getattr(user, "referral_code", "") or f"tax_{user.id:03d}",
             excluded_categories=user_excluded,
+            reference_books=reference_books,
         )
         analysis = Analysis(financial_data_id=fd_id, result_json=json.dumps(result, ensure_ascii=False))
         db.add(analysis); db.commit(); db.refresh(analysis)
@@ -1746,10 +1772,18 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
                 seen.add(c)
     except Exception:
         pass
+    # 📚 書籍ナレッジDB：利用可能な書籍と、この税理士が選択中のID
+    all_books = db.query(ReferenceBook).filter(ReferenceBook.is_active == 1).order_by(ReferenceBook.id.desc()).all()
+    try:
+        selected_books = [str(x) for x in json.loads(user.selected_books or "[]")]
+    except Exception:
+        selected_books = []
     return templates.TemplateResponse("settings.html", {
         "request": request, "user": user,
         "excluded": excluded, "own_partners": own_partners,
         "categories": categories,
+        "all_books": all_books, "selected_books": selected_books,
+        "is_admin": _is_admin(user),
     })
 
 
@@ -1780,6 +1814,11 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
             note = parts[3] if len(parts) > 3 else ""
             own.setdefault(cat, []).append({"name": name, "email": email, "note": note})
     user.own_partners = json.dumps(own, ensure_ascii=False)
+    # 📚 参照する書籍の選択（チェックボックスで複数選択）
+    sel_books = form.getlist("books[]") if hasattr(form, "getlist") else []
+    if not sel_books:
+        sel_books = [v for k, v in form.multi_items() if k == "books[]"] if hasattr(form, "multi_items") else []
+    user.selected_books = json.dumps([str(b) for b in sel_books], ensure_ascii=False)
     db.commit()
     return RedirectResponse("/settings?ok=1", status_code=302)
 
@@ -1894,6 +1933,123 @@ def referral_services_edit(svc_id: int, request: Request, db: Session = Depends(
     return templates.TemplateResponse("admin_referral_service_edit.html", {
         "request": request, "user": user, "service": svc,
     })
+
+
+def _extract_text_from_upload(filename: str, raw: bytes) -> str:
+    """アップロードファイルからテキスト抽出（.pdf=PyMuPDF / それ以外=UTF-8デコード）"""
+    name = (filename or "").lower()
+    if name.endswith(".pdf"):
+        try:
+            import pdfplumber, io  # 既存の依存（requirements.txt）を流用
+            parts = []
+            with pdfplumber.open(io.BytesIO(raw)) as pdf:
+                for page in pdf.pages:
+                    parts.append(page.extract_text() or "")
+            return "\n".join(parts)
+        except Exception as e:
+            print(f"[reference_books] PDF抽出失敗: {e}", flush=True)
+            return ""
+    try:
+        return raw.decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+# 追加の管理者ユーザー名。環境変数 COPARTNER_ADMIN_USERS（カンマ区切り）で明示指定したときのみ有効。
+# ※デフォルトは空。登録で乗っ取り可能な「既定ユーザー名」は持たない（権限は is_admin フラグが主）。
+ADMIN_USERNAMES = [u.strip() for u in os.environ.get("COPARTNER_ADMIN_USERS", "").split(",") if u.strip()]
+# アップロード上限（バイト）。環境変数 COPARTNER_BOOK_MAX_BYTES で上書き可（既定20MB）
+BOOK_MAX_BYTES = int(os.environ.get("COPARTNER_BOOK_MAX_BYTES", str(20 * 1024 * 1024)))
+
+
+def _is_admin(user) -> bool:
+    """運営管理者か。非クレーム可能な is_admin フラグが主。env指定ユーザー名は明示設定時のみ追加で許可。"""
+    if user is None:
+        return False
+    if getattr(user, "is_admin", 0) == 1:
+        return True
+    return getattr(user, "username", None) in ADMIN_USERNAMES
+
+
+@app.get("/admin/reference-books", response_class=HTMLResponse)
+def reference_books_list(request: Request, db: Session = Depends(get_db)):
+    """書籍ナレッジDB 一覧・アップロード（運営のみ）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not _is_admin(user):
+        return RedirectResponse("/settings", status_code=302)
+    books = db.query(ReferenceBook).order_by(
+        ReferenceBook.is_active.desc(), ReferenceBook.id.desc()
+    ).all()
+    return templates.TemplateResponse("admin_reference_books.html", {
+        "request": request, "user": user, "books": books,
+    })
+
+
+@app.post("/admin/reference-books/save")
+async def reference_books_save(
+    request: Request,
+    title: str = Form(...),
+    author: str = Form(""),
+    publisher: str = Form(""),
+    license_status: str = Form("none"),
+    pasted_content: str = Form(""),
+    file: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    """書籍を新規登録（ファイルアップロード or テキスト貼り付け）"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not _is_admin(user):
+        return RedirectResponse("/settings", status_code=302)
+    content = (pasted_content or "").strip()
+    if file is not None and getattr(file, "filename", ""):
+        # 全読み込み前に上限チェック（チャンク読みで上限を超えたら即中断＝メモリ保護）
+        raw = b""
+        too_large = False
+        while True:
+            chunk = await file.read(1024 * 1024)  # 1MBずつ
+            if not chunk:
+                break
+            raw += chunk
+            if len(raw) > BOOK_MAX_BYTES:
+                too_large = True
+                break
+        await file.close()
+        if too_large:
+            return RedirectResponse("/admin/reference-books?err=size", status_code=302)
+        extracted = _extract_text_from_upload(file.filename, raw)
+        if extracted:
+            content = (content + "\n" + extracted).strip() if content else extracted.strip()
+    # 本文が空（抽出失敗・貼付なし）なら保存しない：選んでも無言で効かない書籍を防ぐ
+    if not content.strip():
+        return RedirectResponse("/admin/reference-books?err=empty", status_code=302)
+    book = ReferenceBook(
+        title=title.strip(),
+        author=(author or "").strip(),
+        publisher=(publisher or "").strip(),
+        processed_content=content,
+        license_status=license_status if license_status in ("none", "licensed") else "none",
+        is_active=1,
+        uploaded_by_user_id=user.id,
+    )
+    db.add(book); db.commit()
+    return RedirectResponse("/admin/reference-books?ok=1", status_code=302)
+
+
+@app.post("/admin/reference-books/{book_id}/delete")
+def reference_books_delete(book_id: int, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not _is_admin(user):
+        return RedirectResponse("/settings", status_code=302)
+    book = db.query(ReferenceBook).filter(ReferenceBook.id == book_id).first()
+    if book:
+        db.delete(book); db.commit()
+    return RedirectResponse("/admin/reference-books?ok=1", status_code=302)
 
 
 def _parse_json_list(s: str) -> str:

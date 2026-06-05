@@ -207,6 +207,31 @@
 {# ========== Raksul風ヒーローセクション（黒背景） ========== #}
 {% if result.key_insight or result.owner_message %}
 <div class="rk-hero">
+  {# 🩺 掴みの1枚：経営健診スコア（先頭に大きく） #}
+  {% if result.score is defined and result.score is not none %}
+  {% set sc = result.score %}
+  {% set scol = '#ff5b73' if sc < 45 else ('#fbbf24' if sc < 65 else '#34d399') %}
+  <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.15);padding-bottom:18px;margin-bottom:18px;">
+    <div>
+      <div class="rk-label mb-1">🩺 経営健診スコア</div>
+      <div style="font-size:3.2rem;font-weight:900;line-height:1;color:{{ scol }};">{{ sc }}<small style="font-size:1.05rem;color:#94a3b8;font-weight:600;">/100</small></div>
+      {% if result.score_label %}<div style="font-weight:700;color:{{ scol }};font-size:.92rem;margin-top:2px;">{{ result.score_label }}</div>{% endif %}
+      {% set mx = sc * 2.8 %}
+      <svg width="280" height="38" viewBox="0 0 280 38" style="margin-top:8px;max-width:100%;">
+        <rect x="0" y="6" width="126" height="20" rx="2" fill="rgba(230,0,57,.40)"></rect>
+        <rect x="126" y="6" width="56" height="20" fill="rgba(251,191,36,.40)"></rect>
+        <rect x="182" y="6" width="98" height="20" rx="2" fill="rgba(52,211,153,.40)"></rect>
+        <polygon points="{{ mx-6 }},0 {{ mx+6 }},0 {{ mx }},10" fill="#fff"></polygon>
+        <line x1="{{ mx }}" y1="3" x2="{{ mx }}" y2="30" stroke="#fff" stroke-width="2"></line>
+        <text x="2" y="36" font-size="9" fill="#94a3b8">危険</text>
+        <text x="278" y="36" font-size="9" text-anchor="end" fill="#94a3b8">良好</text>
+      </svg>
+    </div>
+    {% if result.summary %}
+    <div style="flex:1;min-width:240px;font-size:.92rem;line-height:1.7;color:#e5e7eb;">{{ result.summary }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
   {% if result.key_insight %}
   <div class="rk-label mb-2"><span style="border-left:3px solid var(--rk-accent);padding-left:8px;">EXECUTIVE SUMMARY — 最重要ポイント</span></div>
   <div style="font-size:1.4rem;font-weight:800;line-height:1.5;margin-bottom:24px;color:#fff;">
