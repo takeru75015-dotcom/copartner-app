@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from http.cookies import SimpleCookie
 from urllib.parse import quote
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")  # 起動cwdに依存せず app/.env を確実に読む
 
 from .database import init_db, get_db, User, Client, FinancialData, Analysis, ReferralService, ReferenceBook
 from .auth import hash_password, verify_password, create_session_token, decode_session_token

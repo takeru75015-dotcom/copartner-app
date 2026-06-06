@@ -358,8 +358,8 @@
       <div class="metric-card c-green">
         <div class="metric-label">粗利</div>
         <div class="metric-value">{{ "{:,.0f}".format(fd.gross_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        {% if result.growth_rates and result.growth_rates.gross_profit is not none %}
-          {% set g = result.growth_rates.gross_profit %}
+        {% if result.growth_rates and result.growth_rates.get('gross_profit') is not none %}
+          {% set g = result.growth_rates.get('gross_profit') %}
           <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
             <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
           </div>
@@ -371,8 +371,8 @@
       <div class="metric-card c-orange">
         <div class="metric-label">営業利益</div>
         <div class="metric-value">{{ "{:,.0f}".format(fd.operating_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        {% if result.growth_rates and result.growth_rates.operating_profit is not none %}
-          {% set g = result.growth_rates.operating_profit %}
+        {% if result.growth_rates and result.growth_rates.get('operating_profit') is not none %}
+          {% set g = result.growth_rates.get('operating_profit') %}
           <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
             <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
           </div>
@@ -393,8 +393,8 @@
       <div class="metric-card c-purple">
         <div class="metric-label">当期純利益</div>
         <div class="metric-value">{{ "{:,.0f}".format(fd.net_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        {% if result.growth_rates and result.growth_rates.net_profit is not none %}
-          {% set g = result.growth_rates.net_profit %}
+        {% if result.growth_rates and result.growth_rates.get('net_profit') is not none %}
+          {% set g = result.growth_rates.get('net_profit') %}
           <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
             <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
           </div>
@@ -662,8 +662,8 @@
     <div class="col-6 col-md-3"><div class="metric-card c-green">
       <div class="metric-label">💰 現預金</div>
       <div class="metric-value">{{ "{:,.0f}".format(fd.cash or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.cash is not none %}
-        {% set g = result.growth_rates.cash %}
+      {% if result.growth_rates and result.growth_rates.get('cash') is not none %}
+        {% set g = result.growth_rates.get('cash') %}
         <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}
         <div class="metric-sub">{% if fd.revenue > 0 and fd.cash %}月商 {{ "%.1f"|format(fd.cash / (fd.revenue / 12)) }}ヶ月分{% else %}—{% endif %}</div>
@@ -685,8 +685,8 @@
     <div class="col-6 col-md-3"><div class="metric-card c-teal">
       <div class="metric-label">総資産</div>
       <div class="metric-value">{{ "{:,.0f}".format(fd.total_assets or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.total_assets is not none %}
-        {% set g = result.growth_rates.total_assets %}
+      {% if result.growth_rates and result.growth_rates.get('total_assets') is not none %}
+        {% set g = result.growth_rates.get('total_assets') %}
         <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">会社の資産合計</div>{% endif %}
     </div></div>
@@ -697,8 +697,8 @@
     <div class="col-6 col-md-3"><div class="metric-card c-red">
       <div class="metric-label">有利子負債</div>
       <div class="metric-value">{{ "{:,.0f}".format(fd.interest_bearing_debt or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.interest_bearing_debt is not none %}
-        {% set g = result.growth_rates.interest_bearing_debt %}
+      {% if result.growth_rates and result.growth_rates.get('interest_bearing_debt') is not none %}
+        {% set g = result.growth_rates.get('interest_bearing_debt') %}
         <div class="metric-delta {% if g <= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g <= 0 %}arrow-down{% else %}arrow-up{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">金利が発生する借入</div>{% endif %}
       {{ issue_badge('interest_bearing_debt') }}
@@ -711,8 +711,8 @@
     <div class="col-6 col-md-3"><div class="metric-card c-blue">
       <div class="metric-label">純資産</div>
       <div class="metric-value">{{ "{:,.0f}".format(fd.equity or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.equity is not none %}
-        {% set g = result.growth_rates.equity %}
+      {% if result.growth_rates and result.growth_rates.get('equity') is not none %}
+        {% set g = result.growth_rates.get('equity') %}
         <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">資本金 + 内部留保</div>{% endif %}
     </div></div>

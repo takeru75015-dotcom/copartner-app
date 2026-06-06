@@ -137,7 +137,16 @@ def compare_with_annual(monthly_agg: Dict, annual_fd) -> Dict:
 class AggregatedFinancial:
     """月次集計結果を FinancialData っぽく扱うための薄いラッパ"""
     def __init__(self, data: dict):
-        self.id = -1  # 仮ID
+        # ID 設計:
+        # - DB の本物の FinancialData は id>0
+        # - 集計値は負の id を使い、複数年度を扱っても **fiscal_year ごとに一意** にする。
+        #   こうしないと下流の `h.id == fd.id` 走査（前期検出）が他年度の集計値で
+        #   先にマッチし、growth_rates・expense_deltas が誤った期と比較される。
+        _fy = data.get("period", "") or ""
+        _client = data.get("client_id") or 0
+        # 安定ハッシュ（メモリ番地を避ける）。client × fiscal_year でユニーク。
+        _key = f"{_client}::{_fy}"
+        self.id = -1 - (abs(hash(_key)) % 10_000_000)
         self.client_id = data.get("client_id")
         self.period = data.get("period", "")
         self.period_type = "annual_aggregated"  # 「月次から集計した年次」と分かるよう専用ラベル
