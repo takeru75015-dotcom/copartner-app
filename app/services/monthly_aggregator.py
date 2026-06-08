@@ -161,6 +161,109 @@ class AggregatedFinancial:
         self._aggregated_last = data.get("_aggregated_last", "")
 
 
+def aggregate_partial_year(monthly_fds: List) -> Optional[Dict]:
+    """期中（n<12）の月次データを「nヶ月累計」として集計する。
+    AggregatedFinancial と違い、年率換算しない。÷n は呼び出し側で行う。
+
+    戻り値: aggregate_monthly_to_fiscal_year と同形 + 期中メタ情報
+    """
+    if not monthly_fds:
+        return None
+    agg = aggregate_monthly_to_fiscal_year(monthly_fds)
+    if not agg:
+        return None
+    # nヶ月分情報を明示
+    agg["_partial_n_months"] = agg.get("_aggregated_from_count", 0)
+    agg["_is_partial"] = True
+    return agg
+
+
+def get_yoy_period_data(target_partial_agg: Dict, all_fds: List) -> Optional[Dict]:
+    """期中スナップショット（target_partial_agg）の **前年同期間** データを取得し集計。
+
+    例: 当期4-6月の3ヶ月累計 → 前年4-6月の3ヶ月累計を返す。
+    戻り値: aggregate_monthly_to_fiscal_year と同形（前年同期間累計）、取れなければ None
+    """
+    if not target_partial_agg:
+        return None
+    first_period = target_partial_agg.get("_aggregated_first", "")
+    last_period = target_partial_agg.get("_aggregated_last", "")
+    if not first_period or not last_period:
+        return None
+
+    # 月（1-12）の範囲を抽出
+    first_month = _month_index(first_period)
+    last_month = _month_index(last_period)
+    target_year = _year_index(first_period)
+    if first_month == 0 or last_month == 0 or target_year == 0:
+        return None
+
+    # 前年同期間の月リスト（年またぎ対応：last < first なら年またぎ）
+    prev_year = target_year - 1
+    yoy_fds = []
+    for f in all_fds:
+        if getattr(f, "period_type", "") != "monthly":
+            continue
+        fp = getattr(f, "period", "") or ""
+        fy_year = _year_index(fp)
+        fy_month = _month_index(fp)
+        if fy_month == 0:
+            continue
+        # 月の範囲判定（年またぎ無し: first<=last の場合）
+        if first_month <= last_month:
+            if fy_year == prev_year and first_month <= fy_month <= last_month:
+                yoy_fds.append(f)
+        else:
+            # 年またぎ（例: first=11月、last=2月）
+            if (fy_year == prev_year and fy_month >= first_month) or \
+               (fy_year == prev_year + 1 and fy_month <= last_month):
+                yoy_fds.append(f)
+
+    if not yoy_fds:
+        return None
+    # ★ 前年同期間の月数が target と「ぴったり一致」しないなら不完全データ扱い（None 返却）
+    # 少ない場合（前年データ欠落）: 短い期間との比較で歪む
+    # 多い場合（当期データ欠落 or 重複行）: 長い期間との比較で誤った成長率になる
+    target_n = target_partial_agg.get("_aggregated_from_count", 0) or len(yoy_fds)
+    if target_n > 0 and len(yoy_fds) != target_n:
+        return None
+    yoy_agg = aggregate_monthly_to_fiscal_year(yoy_fds)
+    if yoy_agg:
+        yoy_agg["_is_yoy_comparison"] = True
+    return yoy_agg
+
+
+class PartialYearSnapshot:
+    """期中スナップショット（n<12 ヶ月累計）の薄いラッパ。AggregatedFinancialと同インターフェース。"""
+    def __init__(self, data: dict):
+        _fy = data.get("period", "") or ""
+        _client = data.get("client_id") or 0
+        # nヶ月分も含めてキーをユニークに（同FYでも月数が変わるケースで衝突を防ぐ）
+        _n = data.get("_partial_n_months", 0)
+        _first = data.get("_aggregated_first", "")
+        _last = data.get("_aggregated_last", "")
+        _key = f"{_client}::{_fy}::partial::{_n}::{_first}-{_last}"
+        self.id = -10_000_000 - (abs(hash(_key)) % 10_000_000)
+        self.client_id = data.get("client_id")
+        # period 表示は「2026年2月期（期中4ヶ月時点・4-7月累計）」風に
+        _period_label = data.get("period", "")
+        if _n and _first and _last:
+            _period_label = f"{_period_label}（期中{_n}ヶ月時点・{_first}〜{_last}累計）"
+        self.period = _period_label
+        self.period_type = "partial_aggregated"
+        self.fiscal_year = data.get("period", "")
+        for f in _PL_FIELDS + _BS_FIELDS:
+            setattr(self, f, data.get(f, 0))
+        self.prev_revenue = 0
+        self.prev_operating_profit = 0
+        self.breakdown_json = data.get("breakdown_json", "{}")
+        self._aggregated_from_count = data.get("_aggregated_from_count", 0)
+        self._aggregated_first = data.get("_aggregated_first", "")
+        self._aggregated_last = data.get("_aggregated_last", "")
+        self._partial_n_months = data.get("_partial_n_months", 0)
+        self._is_partial = True
+
+
 def build_effective_historical_data(all_fds: list) -> Tuple[list, dict]:
     """月次データを年度別に集計し、月次優先で historical_data を再構築する。
 
@@ -186,22 +289,68 @@ def build_effective_historical_data(all_fds: list) -> Tuple[list, dict]:
     used_annual_fy = set()
 
     # 月次グループから集計
+    # 設計方針（Takeru判断 2026-06-07）:
+    # - **年次データがあるFYは年次を優先**、月次集計は捨てる（決算書が公式・税理士のスタンス）
+    # - 年次データが無いFYのみ月次集計を採用
+    #   - n=12 → AggregatedFinancial（年次相当、period_type='annual_aggregated'）
+    #   - n<12 → PartialYearSnapshot（期中累計、period_type='partial_aggregated'）
+    # - 月次データそのものは monthly_chart_data 用に呼び出し側で別途保持
+    partial_count = 0
+    # annual.period に fy が含まれるかでマッチング（"2024年2月期" vs "2024年2月期（第49期）"）
+    annual_fy_set = set()
+    for a in annual_fds:
+        a_period = getattr(a, "period", "") or ""
+        # fiscal_year 属性があればそれを使う、なければ period 文字列ベース
+        a_fy = getattr(a, "fiscal_year", "") or a_period
+        annual_fy_set.add(a_fy)
+        # 念のため：「2024年2月期」のような prefix も追加（period が「2024年2月期（第49期）」のケース対応）
+        import re as _re_local
+        _m = _re_local.match(r"(\d{4}年\s*\d{1,2}月期)", a_period)
+        if _m:
+            annual_fy_set.add(_m.group(1))
+
+    import re as _re_fy_norm
+    def _normalize_fy(s: str) -> str:
+        """fiscal_year ラベルから '2026年2月期' のような正規形を抽出"""
+        if not s:
+            return ""
+        m = _re_fy_norm.match(r"(\d{4}年\s*\d{1,2}月期)", s)
+        return m.group(1) if m else s
+
     for fy, fds in monthly_groups.items():
-        if len(fds) < 3:  # 月次が3件未満なら集計せずスキップ
-            continue
+        # ★ 年次データがあるFYは月次集計をスキップ（年次を優先）
+        # monthly側の fy が「2026年2月期（第51期）」のケースに備えて正規化してから比較
+        fy_norm = _normalize_fy(fy)
+        if fy in annual_fy_set or fy_norm in annual_fy_set:
+            # データ品質チェックのため乖離だけ記録（採用はしない）
+            agg_data_for_check = aggregate_monthly_to_fiscal_year(fds)
+            if agg_data_for_check:
+                n_check = agg_data_for_check.get("_aggregated_from_count", len(fds))
+                if n_check >= 12:
+                    matching_annual = next((a for a in annual_fds
+                                            if (getattr(a, "fiscal_year", "") or getattr(a, "period", "")).startswith(fy.split("（")[0])),
+                                            None)
+                    if matching_annual:
+                        cmp_result = compare_with_annual(agg_data_for_check, matching_annual)
+                        if cmp_result["discrepancies"]:
+                            discrepancies[fy] = cmp_result["discrepancies"]
+            continue  # 月次集計は採用しない
+
         agg_data = aggregate_monthly_to_fiscal_year(fds)
         if not agg_data:
             continue
-        agg_obj = AggregatedFinancial(agg_data)
+        n = agg_data.get("_aggregated_from_count", len(fds))
+        if n >= 12:
+            agg_obj = AggregatedFinancial(agg_data)
+        else:
+            # 期中スナップショット
+            agg_data["_partial_n_months"] = n
+            agg_data["_is_partial"] = True
+            agg_obj = PartialYearSnapshot(agg_data)
+            partial_count += 1
         aggregated.append(agg_obj)
         fy_with_monthly.append(fy)
         used_annual_fy.add(fy)
-        # 同じ FY の annual と比較
-        matching_annual = next((a for a in annual_fds if (getattr(a, "period", "") == fy)), None)
-        if matching_annual:
-            cmp_result = compare_with_annual(agg_data, matching_annual)
-            if cmp_result["discrepancies"]:
-                discrepancies[fy] = cmp_result["discrepancies"]
 
     # 月次集計でカバーされない年次データだけを残す
     remaining_annual = [a for a in annual_fds if getattr(a, "period", "") not in used_annual_fy]
@@ -214,6 +363,7 @@ def build_effective_historical_data(all_fds: list) -> Tuple[list, dict]:
         "monthly_count": len(monthly_fds),
         "annual_count": len(annual_fds),
         "aggregated_count": len(aggregated),
+        "partial_count": partial_count,  # 期中スナップショットの数
         "fiscal_years_with_monthly": fy_with_monthly,
         "discrepancies_by_fy": discrepancies,
     }

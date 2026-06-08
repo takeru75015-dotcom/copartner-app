@@ -81,6 +81,16 @@ def compute_cf_buckets(fd, breakdown: Dict = None, historical_data: list = None)
     if prev:
         cash_change = (getattr(fd, "cash", 0) or 0) - (getattr(prev, "cash", 0) or 0)
 
+    # ★ 期中（partial_aggregated）の場合、cash_change は n ヶ月の変化なので
+    # 月割り計算の分母として n を持たせる（UI側で÷n表示に使う）
+    _period_type = getattr(fd, "period_type", "") or ""
+    if _period_type == "partial_aggregated":
+        _period_divisor = max(getattr(fd, "_partial_n_months", 0) or 1, 1)
+        _period_label = f"期中{_period_divisor}ヶ月"
+    else:
+        _period_divisor = 12
+        _period_label = "年間"
+
     return {
         "operating_cf": round(operating_cf, 0),
         "investing_cf": round(investing_cf, 0),
@@ -90,6 +100,8 @@ def compute_cf_buckets(fd, breakdown: Dict = None, historical_data: list = None)
         "depreciation": round(depreciation, 0),
         "wc_change": round(wc_change, 0),
         "notes": notes,
+        "_period_divisor": _period_divisor,  # 月割り計算用（年次=12、期中=n）
+        "_period_label": _period_label,
     }
 
 
@@ -101,15 +113,28 @@ def compute_working_capital(fd, payables_days: float = 45.0) -> Dict:
     """
     result = {}
 
-    # 売上債権回転（売上 ÷ 売掛金）
+    # ★ 期中スナップショット対応: revenue/cost_of_sales が n ヶ月累計の場合、
+    # 365/n*12 倍したものを年率換算として扱う（÷n を分子に補正）
+    _period_type = getattr(fd, "period_type", "") or ""
+    if _period_type == "partial_aggregated":
+        _n = max(getattr(fd, "_partial_n_months", 0) or 1, 1)
+        _annual_factor = 12.0 / _n  # n月累計 → 年率換算
+    else:
+        _annual_factor = 1.0
+    result["_period_factor_used"] = _annual_factor
+    result["_period_n_months"] = _n if _period_type == "partial_aggregated" else 12
+
+    # 売上債権回転（年率換算売上 ÷ 売掛金）
     if getattr(fd, "revenue", 0) and getattr(fd, "receivables", 0):
-        turnover = fd.revenue / fd.receivables
+        _rev_annualized = fd.revenue * _annual_factor
+        turnover = _rev_annualized / fd.receivables
         result["receivables_turnover"] = round(turnover, 2)
         result["receivables_days"] = round(365 / turnover, 1)
 
-    # 在庫回転（売上原価 ÷ 棚卸資産）
+    # 在庫回転（年率換算売上原価 ÷ 棚卸資産）
     if getattr(fd, "cost_of_sales", 0) and getattr(fd, "inventory", 0):
-        turnover = fd.cost_of_sales / fd.inventory
+        _cos_annualized = fd.cost_of_sales * _annual_factor
+        turnover = _cos_annualized / fd.inventory
         result["inventory_turnover"] = round(turnover, 2)
         result["inventory_days"] = round(365 / turnover, 1)
 
@@ -127,8 +152,10 @@ def compute_working_capital(fd, payables_days: float = 45.0) -> Dict:
         result["debt_equity_ratio"] = round(fd.total_liabilities / fd.equity * 100, 1)
 
     # 月商キャッシュ倍率（現預金 ÷ 月商）
+    # ★ 期中の場合 revenue が n ヶ月累計なので ÷n、年次なら ÷12
     if getattr(fd, "revenue", 0) > 0 and getattr(fd, "cash", 0) > 0:
-        monthly_revenue = fd.revenue / 12
+        _rev_divisor = (getattr(fd, "_partial_n_months", 0) or 12) if _period_type == "partial_aggregated" else 12
+        monthly_revenue = fd.revenue / _rev_divisor
         result["cash_to_monthly_revenue"] = round(fd.cash / monthly_revenue, 2)
         result["cash_months_of_sales"] = round(fd.cash / monthly_revenue, 1)
 
@@ -194,9 +221,16 @@ def compute_ebitda(fd, breakdown: Dict = None) -> Dict:
             result["ebitda_margin"] = round(ebitda / fd.revenue * 100, 1)
 
         # 有利子負債 / EBITDA（金融機関が気にする指標：5倍超で危険ライン）
+        # ★ 期中の EBITDA は n ヶ月累計なので、debt/EBITDA は年率換算した EBITDA で比較
+        _period_type = getattr(fd, "period_type", "") or ""
+        if _period_type == "partial_aggregated":
+            _n = max(getattr(fd, "_partial_n_months", 0) or 1, 1)
+            ebitda_annualized = ebitda * (12.0 / _n)
+        else:
+            ebitda_annualized = ebitda
         debt = getattr(fd, "interest_bearing_debt", 0) or 0
-        if debt > 0 and ebitda > 0:
-            result["debt_to_ebitda"] = round(debt / ebitda, 2)
+        if debt > 0 and ebitda_annualized > 0:
+            result["debt_to_ebitda"] = round(debt / ebitda_annualized, 2)
 
     return result
 
@@ -229,8 +263,16 @@ def compute_burn_rate(fd, breakdown: Dict = None) -> Dict:
     cash = getattr(fd, "cash", 0) or 0
     debt = getattr(fd, "interest_bearing_debt", 0) or 0
 
+    # ★ 期中スナップショット対応: 期中なら op/depreciation は n ヶ月累計なので ÷n
+    _period_type = getattr(fd, "period_type", "") or ""
+    if _period_type == "partial_aggregated":
+        _divisor = max(getattr(fd, "_partial_n_months", 0) or 1, 1)
+    else:
+        _divisor = 12
+    result["_period_divisor_used"] = _divisor
+
     # 月次営業損益
-    op_monthly = round(op / 12, 1)
+    op_monthly = round(op / _divisor, 1)
     result["operating_monthly"] = op_monthly
 
     # 減価償却（販管費明細から拾う。なければ ebitda 算出のために 0 のまま）
@@ -249,7 +291,7 @@ def compute_burn_rate(fd, breakdown: Dict = None) -> Dict:
                 continue
             if any(kw in k for kw in ["減価償却", "償却費"]):
                 depreciation += v
-    dep_monthly = round(depreciation / 12, 1) if depreciation else 0
+    dep_monthly = round(depreciation / _divisor, 1) if depreciation else 0
     result["depreciation_monthly"] = dep_monthly
 
     # 月次営業CF（簡易EBITDA ベース）＝ 営業利益 + 減価償却
@@ -267,8 +309,13 @@ def compute_burn_rate(fd, breakdown: Dict = None) -> Dict:
     result["real_burn_monthly"] = round(real_burn, 1)
 
     # 黒字化に必要な年間改善
+    # ★ 期中（partial_aggregated）の op は n月累計なので、年間ベースに換算（×12/n）
     if op < 0:
-        result["breakeven_required_yearly"] = round(-op, 1)
+        if _period_type == "partial_aggregated":
+            _op_annualized = op * (12.0 / _divisor)
+            result["breakeven_required_yearly"] = round(-_op_annualized, 1)
+        else:
+            result["breakeven_required_yearly"] = round(-op, 1)
         result["is_burning"] = True
     if real_burn < 0:
         result["repayment_covered_yearly_gap"] = round(-real_burn * 12, 1)

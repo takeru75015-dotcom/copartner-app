@@ -55,6 +55,93 @@ def _md5_short(s) -> str:
 
 templates.env.filters["md5_short"] = _md5_short
 
+
+def _resolve_effective_fd(fd, all_fds_full, fallback_pool=None):
+    """月次fd を effective_fd（分析・表示用）に解決する共通関数。
+    analyze_page / pdf_view 両方で使う。
+
+    優先順位（Takeru判断 2026-06-07）:
+      1. 同FYの年次データ（annual / annual_aggregated）
+      2. 期中スナップショット（partial_aggregated）
+      3. デフォルト: fd そのまま
+
+    引数:
+      fd: 選択された FinancialData（URL/保存用、触らない）
+      all_fds_full: 集計対象のFinancialData（as-ofスライス済み）
+      fallback_pool: annual探索の最終fallback先（全件参照したい時に渡す）。
+                     decree_at スライスで annual がはみ出る場合に効く。
+                     None なら all_fds_full と同じ扱い。
+
+    戻り値: (effective_fd, all_fds_for_client, aggregation_meta, fd_substitution_meta)
+    """
+    effective_fd = fd
+    fd_sub_meta = None
+    aggregation_meta = {"monthly_count": 0, "annual_count": 0, "aggregated_count": 0,
+                        "partial_count": 0, "fiscal_years_with_monthly": [], "discrepancies_by_fy": {}}
+    # ★ 例外時の安全なフォールバック値（UnboundLocalError 防止）
+    effective_fds = list(all_fds_full) if all_fds_full else []
+    try:
+        from .services.monthly_aggregator import build_effective_historical_data
+        effective_fds, aggregation_meta = build_effective_historical_data(all_fds_full)
+        if getattr(fd, "period_type", "") != "monthly":
+            return effective_fd, list(effective_fds), aggregation_meta, None
+
+        _fy_raw = getattr(fd, "fiscal_year", "") or ""
+        _fy_prefix = _fy_raw.split("（")[0]
+        # 1) annual
+        _annual_match = next(
+            (f for f in effective_fds
+             if getattr(f, "period_type", "") == "annual"
+             and _fy_prefix and _fy_prefix in (getattr(f, "fiscal_year", "") or getattr(f, "period", ""))),
+            None,
+        )
+        if _annual_match is None:
+            _fb = fallback_pool if fallback_pool is not None else all_fds_full
+            _annual_match = next(
+                (f for f in _fb
+                 if getattr(f, "period_type", "") in ("annual", "")
+                 and _fy_prefix and _fy_prefix in (getattr(f, "fiscal_year", "") or getattr(f, "period", ""))),
+                None,
+            )
+            if _annual_match is not None and _annual_match not in effective_fds:
+                # 同FYの partial/annual_aggregated を除去（重複防止）
+                effective_fds = [
+                    f for f in effective_fds
+                    if not (
+                        getattr(f, "period_type", "") in ("partial_aggregated", "annual_aggregated")
+                        and (getattr(f, "fiscal_year", "") or "") == _fy_raw
+                    )
+                ]
+                effective_fds = list(effective_fds) + [_annual_match]
+        # 2) annual_aggregated
+        _agg_match = next(
+            (f for f in effective_fds
+             if getattr(f, "period_type", "") == "annual_aggregated"
+             and (getattr(f, "fiscal_year", "") or "") == _fy_raw),
+            None,
+        )
+        # 3) partial_aggregated
+        _partial_match = next(
+            (f for f in effective_fds
+             if getattr(f, "period_type", "") == "partial_aggregated"
+             and (getattr(f, "fiscal_year", "") or "") == _fy_raw),
+            None,
+        )
+        _picked = _annual_match or _agg_match or _partial_match
+        if _picked is not None and _picked is not fd:
+            effective_fd = _picked
+            fd_sub_meta = {
+                "original_fd_id": fd.id,
+                "original_period": fd.period,
+                "effective_period_type": getattr(effective_fd, "period_type", ""),
+                "effective_period": getattr(effective_fd, "period", ""),
+                "fiscal_year": _fy_raw,
+                "n_months": getattr(effective_fd, "_partial_n_months", None),
+            }
+    except Exception as _e:
+        print(f"[_resolve_effective_fd] skip: {_e}", flush=True)
+    return effective_fd, list(effective_fds), aggregation_meta, fd_sub_meta
+
 @app.on_event("startup")
 def startup():
     init_db()
@@ -1067,11 +1154,109 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
     aggregation_meta = {"monthly_count": 0, "annual_count": 0, "aggregated_count": 0,
                         "fiscal_years_with_monthly": [], "discrepancies_by_fy": {}}
     monthly_chart_data = None
+    # ★ fd（DBレコード・URL/保存用）と effective_fd（分析・表示用）を分離
+    #   - fd は触らない（fd.id は DB の本物のID、URL・Analysis保存・dismiss・PDF出力に使う）
+    #   - effective_fd は分析・画面表示用の集計値（AggregatedFinancial / PartialYearSnapshot / annual の何れか）
+    #   - 両方が同じものを指す場合もある（fd が annual の時）
+    effective_fd = fd  # デフォルト: fd そのまま使う
+    fd_substitution_meta = None
     try:
         from .services.monthly_aggregator import build_effective_historical_data
         effective_fds, aggregation_meta = build_effective_historical_data(all_fds_for_client)
-        if aggregation_meta.get("aggregated_count", 0) > 0:
+        # ★ aggregated_count/partial_count が0でも、月次fdをクリックした場合は
+        # 同FYの annual を探して effective_fd に採用する（「年次あれば年次優先」ルール）
+        _need_substitution = (
+            getattr(fd, "period_type", "") == "monthly"
+            or aggregation_meta.get("aggregated_count", 0) > 0
+            or aggregation_meta.get("partial_count", 0) > 0
+        )
+        if _need_substitution:
             all_fds_for_client = effective_fds
+            # ★ fdが月次レコードの場合、effective_fds から該当する集計値を effective_fd として取り出す
+            #   優先順位（Takeru判断 2026-06-07）: 年次があれば年次 / なければ月次集計 / 期中なら期中スナップ
+            if getattr(fd, "period_type", "") == "monthly":
+                _fy_raw = getattr(fd, "fiscal_year", "") or ""
+                _fy_prefix = _fy_raw.split("（")[0]  # 「2026年2月期（第51期）」→「2026年2月期」
+                # 1) annual を最優先で探す
+                # ★ effective_fds は fd の手前までしかスライスされてないため、annual が
+                #    fd より後ろ（決算月ベース）にある場合は含まれない。
+                #    → 全件 (_all_fds_for_cf) から annual を探す
+                _annual_match = next(
+                    (f for f in effective_fds
+                     if getattr(f, "period_type", "") == "annual"
+                     and _fy_prefix and _fy_prefix in (getattr(f, "fiscal_year", "") or getattr(f, "period", ""))),
+                    None,
+                )
+                if _annual_match is None:
+                    # 履歴スライスで除外されている可能性 → 全件から探す
+                    _annual_match = next(
+                        (f for f in _all_fds_for_cf
+                         if getattr(f, "period_type", "") in ("annual", "")
+                         and _fy_prefix
+                         and _fy_prefix in (getattr(f, "fiscal_year", "") or getattr(f, "period", ""))),
+                        None,
+                    )
+                    # ★ 全件から拾った annual を all_fds_for_client（=effective_fds）に追加。
+                    # こうしないと historical_data に effective_fd 自身が含まれず、
+                    # trend metrics や前期検出が「分析対象の期」を見失う。
+                    # 同FYの partial_aggregated/annual_aggregated は除去（annualが優先・重複防止）
+                    if _annual_match is not None and _annual_match not in all_fds_for_client:
+                        all_fds_for_client = [
+                            f for f in all_fds_for_client
+                            if not (
+                                getattr(f, "period_type", "") in ("partial_aggregated", "annual_aggregated")
+                                and (getattr(f, "fiscal_year", "") or "") == _fy_raw
+                            )
+                        ]
+                        all_fds_for_client = list(all_fds_for_client) + [_annual_match]
+                # 2) annual_aggregated（月次12ヶ月集計）
+                _agg_match = next(
+                    (f for f in effective_fds
+                     if getattr(f, "period_type", "") == "annual_aggregated"
+                     and (getattr(f, "fiscal_year", "") or "") == _fy_raw),
+                    None,
+                )
+                # 3) partial_aggregated（期中n月集計）
+                _partial_match = next(
+                    (f for f in effective_fds
+                     if getattr(f, "period_type", "") == "partial_aggregated"
+                     and (getattr(f, "fiscal_year", "") or "") == _fy_raw),
+                    None,
+                )
+                _picked = _annual_match or _agg_match or _partial_match
+                if _picked is not None and _picked is not fd:
+                    effective_fd = _picked
+                    fd_substitution_meta = {
+                        "original_fd_id": fd.id,
+                        "original_period": fd.period,
+                        "effective_period_type": getattr(effective_fd, "period_type", ""),
+                        "effective_period": getattr(effective_fd, "period", ""),
+                        "fiscal_year": _fy_raw,
+                        "n_months": getattr(effective_fd, "_partial_n_months", None),
+                    }
+                    print(f"[effective_fd採用] {cl.name} 月次({fd.period}) → {fd_substitution_meta['effective_period_type']}({fd_substitution_meta['effective_period']})", flush=True)
+                    # ★ effective_fd 用に breakdown / cash系 / expense_groups を再計算
+                    try:
+                        breakdown = json.loads(effective_fd.breakdown_json or "{}")
+                    except Exception:
+                        breakdown = {}
+                    cash_burn = compute_burn_rate(effective_fd, breakdown=breakdown)
+                    cash_wc = compute_working_capital(effective_fd)
+                    cash_ebitda = compute_ebitda(effective_fd, breakdown)
+                    # cash_cf 用の history は all_fds_for_client（effective_fds 入り）を使う。
+                    # ただし、effective_fd 自身が含まれるなら除いて渡す（前期検出を狂わせないため）。
+                    _hist_for_cf = [h for h in all_fds_for_client if h is not effective_fd]
+                    cash_cf = compute_cf_buckets(effective_fd, breakdown=breakdown, historical_data=_hist_for_cf)
+                    try:
+                        from .services.expense_grouping import aggregate_expenses
+                        expense_groups["selling_expenses"] = aggregate_expenses(breakdown.get("selling_expenses_detail") or {})
+                        expense_groups["cost_of_sales"] = aggregate_expenses(breakdown.get("cost_of_sales_detail") or {})
+                        # ★ 月次fd時に計算済みの古い delta を除去（年次/期中とのスケール不一致を防ぐ）
+                        # effective_fd 用の delta は別途必要なら再計算
+                        for _del_key in ("selling_expenses_delta", "cost_of_sales_delta"):
+                            expense_groups.pop(_del_key, None)
+                    except Exception as _e:
+                        print(f"[effective_fd 再計算 expense_groups] skip: {_e}", flush=True)
 
         monthly_fds_for_chart = [f for f in _sorted if getattr(f, "period_type", "") == "monthly"]
         if len(monthly_fds_for_chart) >= 3:
@@ -1142,6 +1327,22 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
         print(f"[月次集計] skip: {_e}", flush=True)
 
     existing = db.query(Analysis).filter(Analysis.financial_data_id == fd_id).order_by(Analysis.created_at.desc()).first()
+    # ★ キャッシュ整合性チェック: effective_fd が置き換わってる場合、
+    # 古いキャッシュ（月次fd時点）と新しい表示数字（年次/期中集計）が食い違うため、
+    # キャッシュの fd_substitution が現在と一致しないなら無効化して再分析させる
+    if existing and fd_substitution_meta:
+        try:
+            _cached = json.loads(existing.result_json)
+            _cached_sub = _cached.get("fd_substitution") or {}
+            _curr_eff_type = fd_substitution_meta.get("effective_period_type")
+            _curr_eff_period = fd_substitution_meta.get("effective_period")
+            _cache_eff_type = _cached_sub.get("effective_period_type")
+            _cache_eff_period = _cached_sub.get("effective_period")
+            if (_cache_eff_type != _curr_eff_type) or (_cache_eff_period != _curr_eff_period):
+                print(f"[キャッシュ無効化] effective_fd 変更検知: cache={_cache_eff_type}/{_cache_eff_period} → current={_curr_eff_type}/{_curr_eff_period}", flush=True)
+                existing = None  # bypass
+        except Exception as _e:
+            print(f"[キャッシュ整合性チェック] skip: {_e}", flush=True)
     if existing:
         result = json.loads(existing.result_json)
         # キャッシュされた古い分析データに新フィールドが無い場合、historical_data から補完
@@ -1160,7 +1361,7 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
         except Exception:
             dismissed_sols = []
         return templates.TemplateResponse("analysis.html", {
-            "request": request, "user": user, "client": cl, "fd": fd, "result": result,
+            "request": request, "user": user, "client": cl, "fd": fd, "effective_fd": effective_fd, "result": result, "fd_substitution_meta": fd_substitution_meta,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "expense_groups": expense_groups,
@@ -1213,18 +1414,27 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
                 {"title": b.title, "author": b.author, "content": b.processed_content}
                 for b in books
             ]
+        # ★ analyze_financials には effective_fd を渡す（分析用）
+        # ★ Analysis 保存は fd_id（DB上の本物のID、URLパラメータ）を使う → DB整合性
+        # ★ raw_monthly_data = 期中スナップショットの YoY 検索用に生月次データを別途渡す
+        #   （historical_data は effective_fds 置換で生月次が消えてるため）
+        _raw_monthly = [f for f in _all_fds_for_cf if getattr(f, "period_type", "") == "monthly"]
         result = analyze_financials(
-            fd, cl.name, cl.industry,
+            effective_fd, cl.name, cl.industry,
             business_details=merged_bd,
             historical_data=all_fds_for_client if len(all_fds_for_client) > 1 else None,
             referral_code=getattr(user, "referral_code", "") or f"tax_{user.id:03d}",
             excluded_categories=user_excluded,
             reference_books=reference_books,
+            raw_monthly_data=_raw_monthly if _raw_monthly else None,
         )
+        # fd差し替えメタを result にも同梱（UI表示用）
+        if fd_substitution_meta:
+            result["fd_substitution"] = fd_substitution_meta
         analysis = Analysis(financial_data_id=fd_id, result_json=json.dumps(result, ensure_ascii=False))
         db.add(analysis); db.commit(); db.refresh(analysis)
         return templates.TemplateResponse("analysis.html", {
-            "request": request, "user": user, "client": cl, "fd": fd, "result": result,
+            "request": request, "user": user, "client": cl, "fd": fd, "effective_fd": effective_fd, "result": result, "fd_substitution_meta": fd_substitution_meta,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "expense_groups": expense_groups,
@@ -1241,7 +1451,8 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
         else:
             friendly_err = err_str
         return templates.TemplateResponse("analysis.html", {
-            "request": request, "user": user, "client": cl, "fd": fd, "result": None,
+            "request": request, "user": user, "client": cl, "fd": fd, "effective_fd": effective_fd, "result": None,
+            "fd_substitution_meta": fd_substitution_meta,
             "breakdown": breakdown,
             "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
             "expense_groups": expense_groups,
@@ -1355,11 +1566,41 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/dashboard", status_code=302)
     cl = db.query(Client).filter(Client.id == fd.client_id).first()
 
+    # ★ analyze_page と同様に effective_fd に解決する（月次fdクリック時の整合性）
+    # ★ fd の手前までスライス（as-of）して analyze_page と同じ範囲で解決する
+    # こうしないと後から月次が追加された場合、PDFは新しい snapshot を使うが
+    # analyze_page のキャッシュは古いものを使う食い違いが起きる
+    _all_fds_full = db.query(FinancialData).filter(FinancialData.client_id == cl.id).all()
+    _sorted_pdf = sorted(_all_fds_full, key=lambda x: x.period or "")
+    _idx_pdf = next((i for i, x in enumerate(_sorted_pdf) if x.id == fd.id), None)
+    _all_fds_for_resolve = _sorted_pdf[: _idx_pdf + 1] if _idx_pdf is not None else [fd]
+    # fallback_pool=_all_fds_full: as-ofスライスで annual が除外される場合、全件から拾えるように
+    # こうしないと PDF が partial/月次 を effective_fd に採用するが、analyze_page は annual を採用する食い違いが起きる
+    effective_fd, _effective_fds, _agg_meta, fd_substitution_meta = _resolve_effective_fd(
+        fd, _all_fds_for_resolve, fallback_pool=_all_fds_full
+    )
+
     existing = db.query(Analysis).filter(
         Analysis.financial_data_id == fd_id
     ).order_by(Analysis.created_at.desc()).first()
     if not existing:
         return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+
+    # ★ キャッシュ整合性チェック: effective_fd が現在と一致しないなら analyze_page にリダイレクトして再生成
+    # （analyze_page と同じロジック・古い narrative と新しい display 値の食い違いを防ぐ）
+    if fd_substitution_meta:
+        try:
+            _cached = json.loads(existing.result_json)
+            _cached_sub = _cached.get("fd_substitution") or {}
+            _curr_eff_type = fd_substitution_meta.get("effective_period_type")
+            _curr_eff_period = fd_substitution_meta.get("effective_period")
+            _cache_eff_type = _cached_sub.get("effective_period_type")
+            _cache_eff_period = _cached_sub.get("effective_period")
+            if (_cache_eff_type != _curr_eff_type) or (_cache_eff_period != _curr_eff_period):
+                print(f"[pdf_view キャッシュ無効化] cache={_cache_eff_type}/{_cache_eff_period} → current={_curr_eff_type}/{_curr_eff_period}", flush=True)
+                return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+        except Exception as _e:
+            print(f"[pdf_view キャッシュ整合性チェック] skip: {_e}", flush=True)
 
     result = json.loads(existing.result_json)
 
@@ -1389,7 +1630,7 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
     if not pdf_content:
         try:
             from .claude_client import generate_owner_pdf_content
-            pdf_content = generate_owner_pdf_content(filtered_result, fd, cl.name, fd.period)
+            pdf_content = generate_owner_pdf_content(filtered_result, effective_fd, cl.name, effective_fd.period)
             # 元のresultに保存（dismissed_solutionsに紐づいた状態のキャッシュ）
             result["owner_pdf_content"] = pdf_content
             existing.result_json = json.dumps(result, ensure_ascii=False)
@@ -1473,6 +1714,21 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
     _all_fds_for_cf = db.query(FinancialData).join(Client).filter(Client.id == fd.client_id).all()
     cash_cf = compute_cf_buckets(fd, breakdown=breakdown, historical_data=_all_fds_for_cf)
 
+    # ★ effective_fd が置換された場合は、breakdown / cash 系を effective_fd ベースで再計算
+    # （analyze_page と同じ整合性ロジック）
+    if fd_substitution_meta:
+        try:
+            breakdown = json.loads(effective_fd.breakdown_json or "{}")
+        except Exception:
+            breakdown = {}
+        cash_burn = compute_burn_rate(effective_fd, breakdown=breakdown)
+        cash_wc = compute_working_capital(effective_fd)
+        cash_ebitda = compute_ebitda(effective_fd, breakdown)
+        # cash_cf 用の history は _effective_fds から effective_fd を除いて使う
+        # （生月次データを渡すと前期検出が h.id==fd.id で走査ミスする）
+        _hist_for_cf = [h for h in (_effective_fds or []) if h is not effective_fd]
+        cash_cf = compute_cf_buckets(effective_fd, breakdown=breakdown, historical_data=_hist_for_cf)
+
     # 月次データ集計（pdf_view 用。analyze と同じロジック）
     monthly_chart_data = None
     try:
@@ -1526,6 +1782,8 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
         "request": request,
         "client": cl,
         "fd": fd,
+        "effective_fd": effective_fd,
+        "fd_substitution_meta": fd_substitution_meta,
         "pdf_content": pdf_content,
         "result": filtered_result,  # フィルタ済み（削除済み除外）
         "breakdown": breakdown,

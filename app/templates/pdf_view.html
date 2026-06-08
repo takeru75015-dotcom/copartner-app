@@ -1,4 +1,8 @@
 {% extends 'base.html' %}
+{# ★ display_fd = 表示用データ（effective_fd or fd）。月次fdの場合 effective_fd が集計値になる #}
+{% set display_fd = effective_fd if effective_fd else fd %}
+{% set period_divisor = display_fd._partial_n_months if (display_fd.period_type|default('') == 'partial_aggregated' and display_fd._partial_n_months) else 12 %}
+
 {% block title %}{{ client.name }} 経営分析レポート{% endblock %}
 
 {% block head %}
@@ -141,7 +145,7 @@
   <div class="pdf-cover">
     <div class="label">経営分析レポート / MANAGEMENT REPORT</div>
     <h1>{{ client.name }}</h1>
-    <div class="period">{{ fd.period }}</div>
+    <div class="period">{{ display_fd.period }}</div>
     <div class="subtitle">{{ pdf_content.cover_subtitle or "経営状況のご報告" }}</div>
     <div class="footer">
       作成: {{ user.display_name or user.username }} 税理士事務所<br>
@@ -167,31 +171,31 @@
     <div class="kpi-row">
       <div class="kpi-card">
         <div class="label">売上高</div>
-        <div class="value">{% if fd.revenue >= 10000 %}{{ "%.2f"|format(fd.revenue/10000) }}億{% elif fd.revenue >= 1000 %}{{ "%.0f"|format(fd.revenue/1000) }}千万{% else %}{{ "{:,.0f}".format(fd.revenue or 0) }}万{% endif %}</div>
-        {% if fd.prev_revenue and fd.prev_revenue > 0 %}{% set g = (fd.revenue - fd.prev_revenue) / fd.prev_revenue * 100 %}
+        <div class="value">{% if display_fd.revenue >= 10000 %}{{ "%.2f"|format(display_fd.revenue/10000) }}億{% elif display_fd.revenue >= 1000 %}{{ "%.0f"|format(display_fd.revenue/1000) }}千万{% else %}{{ "{:,.0f}".format(display_fd.revenue or 0) }}万{% endif %}</div>
+        {% if display_fd.prev_revenue and display_fd.prev_revenue > 0 %}{% set g = (display_fd.revenue - display_fd.prev_revenue) / display_fd.prev_revenue * 100 %}
         <div class="delta {% if g >= 0 %}up{% else %}down{% endif %}">前期比 {{ "%+.1f"|format(g) }}%</div>
         {% endif %}
       </div>
       <div class="kpi-card">
         <div class="label">粗利</div>
-        <div class="value">{% if fd.gross_profit >= 10000 %}{{ "%.2f"|format(fd.gross_profit/10000) }}億{% elif fd.gross_profit >= 1000 %}{{ "%.0f"|format(fd.gross_profit/1000) }}千万{% else %}{{ "{:,.0f}".format(fd.gross_profit or 0) }}万{% endif %}</div>
-        {% if fd.revenue %}<div class="delta">粗利率 {{ "%.1f"|format(fd.gross_profit / fd.revenue * 100) }}%</div>{% endif %}
+        <div class="value">{% if display_fd.gross_profit >= 10000 %}{{ "%.2f"|format(display_fd.gross_profit/10000) }}億{% elif display_fd.gross_profit >= 1000 %}{{ "%.0f"|format(display_fd.gross_profit/1000) }}千万{% else %}{{ "{:,.0f}".format(display_fd.gross_profit or 0) }}万{% endif %}</div>
+        {% if display_fd.revenue %}<div class="delta">粗利率 {{ "%.1f"|format(display_fd.gross_profit / display_fd.revenue * 100) }}%</div>{% endif %}
       </div>
       <div class="kpi-card">
         <div class="label">本業のもうけ（営業利益）</div>
-        <div class="value" style="color:{% if fd.operating_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(fd.operating_profit or 0) }}万</div>
-        {% if fd.revenue %}<div class="delta">利益率 {{ "%.1f"|format(fd.operating_profit / fd.revenue * 100) }}%</div>{% endif %}
+        <div class="value" style="color:{% if display_fd.operating_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(display_fd.operating_profit or 0) }}万</div>
+        {% if display_fd.revenue %}<div class="delta">利益率 {{ "%.1f"|format(display_fd.operating_profit / display_fd.revenue * 100) }}%</div>{% endif %}
       </div>
-      {% if fd.ordinary_profit %}
+      {% if display_fd.ordinary_profit %}
       <div class="kpi-card">
         <div class="label">経常利益</div>
-        <div class="value" style="color:{% if fd.ordinary_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(fd.ordinary_profit) }}万</div>
+        <div class="value" style="color:{% if display_fd.ordinary_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(display_fd.ordinary_profit) }}万</div>
         <div class="delta" style="color:var(--rk-text-muted);">本業±営業外</div>
       </div>
       {% endif %}
       <div class="kpi-card">
         <div class="label">当期純利益</div>
-        <div class="value" style="color:{% if fd.net_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(fd.net_profit or 0) }}万</div>
+        <div class="value" style="color:{% if display_fd.net_profit >= 0 %}#16a34a{% else %}var(--rk-accent){% endif %};">{{ "{:+,.0f}".format(display_fd.net_profit or 0) }}万</div>
         <div class="delta" style="color:var(--rk-text-muted);">税引後の最終利益</div>
       </div>
     </div>

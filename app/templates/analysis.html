@@ -1,6 +1,22 @@
 {% extends 'base.html' %}
 {% block title %}AI分析結果 - {{ client.name }}{% endblock %}
 
+{# ★ display_fd = 表示・分析用データ（年次 or 集計値）。fd は URL/保存用（DBの本物のID）
+   月次fdを開いた時、effective_fd には集計後（annual_aggregated / partial_aggregated）が入る #}
+{% set display_fd = effective_fd if effective_fd else fd %}
+
+{# ★ period_divisor = 売上を月商化する時の分母。年次=12、期中=n_months
+   partial_aggregated の revenue は n ヶ月累計なので ÷n しないと月商比が n/12 倍に誤表示される #}
+{% set period_divisor = display_fd._partial_n_months if (display_fd.period_type|default('') == 'partial_aggregated' and display_fd._partial_n_months) else 12 %}
+
+{# ★ 成長率データの一元化:
+   期中（partial_aggregated）時は result.growth_rates_yoy（前年同期間比）を使う、
+   年次時は growth_data（前期比）を使う。
+   ラベルも合わせて切り替えて、KPIカードや trend 表示で正しい意味で出す。 #}
+{% set _is_partial_view = display_fd.period_type|default('') == 'partial_aggregated' %}
+{% set growth_data = result.growth_rates_yoy if (_is_partial_view and result and result.growth_rates_yoy) else (result.growth_rates if result else {}) %}
+{% set growth_label = "YoY" if _is_partial_view else "前期比" %}
+
 {# 課題ラベル：metric_key から prioritized_problems を逆引きしてバッジ表示 #}
 {% macro issue_badge(metric_key) %}
   {% if result and result.prioritized_problems %}
@@ -186,7 +202,7 @@
 </div>
 
 <div class="card p-3 mb-4">
-  <h4 class="fw-bold mb-1">{{ client.name }} <span class="text-muted small">— {{ fd.period }}</span></h4>
+  <h4 class="fw-bold mb-1">{{ client.name }} <span class="text-muted small">— {{ display_fd.period }}</span></h4>
   <div class="d-flex gap-3 align-items-center flex-wrap">
     <span class="text-muted small"><i class="fas fa-building me-1"></i>{{ client.industry or '業種未登録' }}</span>
     {% if client.business_details %}
@@ -344,11 +360,16 @@
     <div class="col-6 col-md-3">
       <div class="metric-card c-blue">
         <div class="metric-label">売上高</div>
-        <div class="metric-value">{{ "{:,.0f}".format(fd.revenue) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        {% if fd.prev_revenue and fd.prev_revenue > 0 %}
-          {% set growth = (fd.revenue - fd.prev_revenue) / fd.prev_revenue * 100 %}
+        <div class="metric-value">{{ "{:,.0f}".format(display_fd.revenue) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if growth_data and growth_data.get('revenue') is not none %}
+          {% set growth = growth_data.get('revenue') %}
           <div class="metric-delta {% if growth >= 0 %}up{% else %}down{% endif %}">
-            <i class="fas fa-{% if growth >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(growth) }}%
+            <i class="fas fa-{% if growth >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(growth) }}%
+          </div>
+        {% elif display_fd.prev_revenue and display_fd.prev_revenue > 0 %}
+          {% set growth = (display_fd.revenue - display_fd.prev_revenue) / display_fd.prev_revenue * 100 %}
+          <div class="metric-delta {% if growth >= 0 %}up{% else %}down{% endif %}">
+            <i class="fas fa-{% if growth >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(growth) }}%
           </div>
         {% else %}<div class="metric-sub">前期データなし</div>{% endif %}
         {{ issue_badge('revenue') }}
@@ -357,34 +378,34 @@
     <div class="col-6 col-md-3">
       <div class="metric-card c-green">
         <div class="metric-label">粗利</div>
-        <div class="metric-value">{{ "{:,.0f}".format(fd.gross_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        {% if result.growth_rates and result.growth_rates.get('gross_profit') is not none %}
-          {% set g = result.growth_rates.get('gross_profit') %}
+        <div class="metric-value">{{ "{:,.0f}".format(display_fd.gross_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if growth_data and growth_data.get('gross_profit') is not none %}
+          {% set g = growth_data.get('gross_profit') %}
           <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
-            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
+            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(g) }}%
           </div>
         {% endif %}
-        <div class="metric-sub"><abbr class="term" title="売上から仕入れ（原価）を引いた利益の割合">粗利率</abbr> {% if fd.revenue > 0 %}{{ "%.1f"|format(fd.gross_profit / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+        <div class="metric-sub"><abbr class="term" title="売上から仕入れ（原価）を引いた利益の割合">粗利率</abbr> {% if display_fd.revenue > 0 %}{{ "%.1f"|format(display_fd.gross_profit / display_fd.revenue * 100) }}%{% else %}—{% endif %}</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="metric-card c-orange">
         <div class="metric-label">営業利益</div>
-        <div class="metric-value">{{ "{:,.0f}".format(fd.operating_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        {% if result.growth_rates and result.growth_rates.get('operating_profit') is not none %}
-          {% set g = result.growth_rates.get('operating_profit') %}
+        <div class="metric-value">{{ "{:,.0f}".format(display_fd.operating_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if growth_data and growth_data.get('operating_profit') is not none %}
+          {% set g = growth_data.get('operating_profit') %}
           <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
-            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
+            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(g) }}%
           </div>
         {% endif %}
-        <div class="metric-sub"><abbr class="term" title="本業で得た利益の売上に対する割合">営業利益率</abbr> {% if fd.revenue > 0 %}{{ "%.1f"|format(fd.operating_profit / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+        <div class="metric-sub"><abbr class="term" title="本業で得た利益の売上に対する割合">営業利益率</abbr> {% if display_fd.revenue > 0 %}{{ "%.1f"|format(display_fd.operating_profit / display_fd.revenue * 100) }}%{% else %}—{% endif %}</div>
       </div>
     </div>
-    {% if fd.ordinary_profit %}
+    {% if display_fd.ordinary_profit %}
     <div class="col-6 col-md-3">
       <div class="metric-card c-orange">
         <div class="metric-label">経常利益</div>
-        <div class="metric-value">{{ "{:,.0f}".format(fd.ordinary_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        <div class="metric-value">{{ "{:,.0f}".format(display_fd.ordinary_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
         <div class="metric-sub">営業利益±営業外損益（金利等）</div>
       </div>
     </div>
@@ -392,32 +413,32 @@
     <div class="col-6 col-md-3">
       <div class="metric-card c-purple">
         <div class="metric-label">当期純利益</div>
-        <div class="metric-value">{{ "{:,.0f}".format(fd.net_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        {% if result.growth_rates and result.growth_rates.get('net_profit') is not none %}
-          {% set g = result.growth_rates.get('net_profit') %}
+        <div class="metric-value">{{ "{:,.0f}".format(display_fd.net_profit) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        {% if growth_data and growth_data.get('net_profit') is not none %}
+          {% set g = growth_data.get('net_profit') %}
           <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}">
-            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%
+            <i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(g) }}%
           </div>
         {% else %}
           <div class="metric-sub">税金控除後の最終利益</div>
         {% endif %}
       </div>
     </div>
-    {% if fd.cost_of_sales %}
+    {% if display_fd.cost_of_sales %}
     <div class="col-6 col-md-3">
       <div class="metric-card" style="--c:#9ca3af;">
         <div class="metric-label">売上原価</div>
-        <div class="metric-value">{{ "{:,.0f}".format(fd.cost_of_sales) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        <div class="metric-sub">売上比 {% if fd.revenue %}{{ "%.1f"|format(fd.cost_of_sales / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+        <div class="metric-value">{{ "{:,.0f}".format(display_fd.cost_of_sales) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        <div class="metric-sub">売上比 {% if display_fd.revenue %}{{ "%.1f"|format(display_fd.cost_of_sales / display_fd.revenue * 100) }}%{% else %}—{% endif %}</div>
       </div>
     </div>
     {% endif %}
-    {% if fd.selling_expenses %}
+    {% if display_fd.selling_expenses %}
     <div class="col-6 col-md-3">
       <div class="metric-card" style="--c:#9ca3af;">
         <div class="metric-label">販管費</div>
-        <div class="metric-value">{{ "{:,.0f}".format(fd.selling_expenses) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-        <div class="metric-sub">売上比 {% if fd.revenue %}{{ "%.1f"|format(fd.selling_expenses / fd.revenue * 100) }}%{% else %}—{% endif %}</div>
+        <div class="metric-value">{{ "{:,.0f}".format(display_fd.selling_expenses) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+        <div class="metric-sub">売上比 {% if display_fd.revenue %}{{ "%.1f"|format(display_fd.selling_expenses / display_fd.revenue * 100) }}%{% else %}—{% endif %}</div>
       </div>
     </div>
     {% endif %}
@@ -478,7 +499,7 @@
     </div>
     <div class="small text-muted mb-3">
       販管費合計 <strong>{{ "{:,.0f}".format(eg_app.total) }}万円</strong>
-      {% if fd.revenue %}（売上比 {{ "%.1f"|format(eg_app.total / fd.revenue * 100) }}%）{% endif %}
+      {% if display_fd.revenue %}（売上比 {{ "%.1f"|format(eg_app.total / display_fd.revenue * 100) }}%）{% endif %}
     </div>
     <div class="table-responsive">
       <table class="table table-sm align-middle" style="font-size:.85rem;">
@@ -487,7 +508,7 @@
             <th style="font-size:.8rem;">グループ</th>
             <th class="text-end" style="font-size:.8rem;">今期</th>
             <th class="text-end" style="font-size:.8rem;">販管費内</th>
-            {% if fd.revenue %}<th class="text-end" style="font-size:.8rem;">売上比</th>{% endif %}
+            {% if display_fd.revenue %}<th class="text-end" style="font-size:.8rem;">売上比</th>{% endif %}
             {% if eg_app_delta %}<th class="text-end" style="font-size:.8rem;">前期比</th>{% endif %}
             <th style="font-size:.75rem;">主要費目</th>
           </tr>
@@ -501,7 +522,7 @@
             <td><strong>{{ group_name }}</strong></td>
             <td class="text-end fw-bold">{{ "{:,.0f}".format(group_total) }}万円</td>
             <td class="text-end text-muted">{{ "%.1f"|format(share) }}%</td>
-            {% if fd.revenue %}<td class="text-end text-muted">{{ "%.1f"|format(group_total / fd.revenue * 100) }}%</td>{% endif %}
+            {% if display_fd.revenue %}<td class="text-end text-muted">{{ "%.1f"|format(group_total / display_fd.revenue * 100) }}%</td>{% endif %}
             {% if eg_app_delta %}
             <td class="text-end" style="color:{% if delta_row and delta_row.delta > 0 %}#E60039{% elif delta_row and delta_row.delta < 0 %}#16a34a{% else %}#6B7280{% endif %};">
               {% if delta_row %}
@@ -546,7 +567,7 @@
           <tr>
             <td class="small">{{ item.name if item.name is defined else item }}</td>
             <td class="small text-end fw-bold">{{ "{:,.0f}".format(item.amount or 0) }}万円</td>
-            <td class="small text-end text-muted">{% if fd.revenue %}{{ "%.1f"|format((item.amount or 0) / fd.revenue * 100) }}%{% endif %}</td>
+            <td class="small text-end text-muted">{% if display_fd.revenue %}{{ "%.1f"|format((item.amount or 0) / display_fd.revenue * 100) }}%{% endif %}</td>
           </tr>
           {% endfor %}
           </tbody>
@@ -661,33 +682,33 @@
   <div class="row g-3 mb-2">
     <div class="col-6 col-md-3"><div class="metric-card c-green">
       <div class="metric-label">💰 現預金</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.cash or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.get('cash') is not none %}
-        {% set g = result.growth_rates.get('cash') %}
-        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      <div class="metric-value">{{ "{:,.0f}".format(display_fd.cash or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if growth_data and growth_data.get('cash') is not none %}
+        {% set g = growth_data.get('cash') %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(g) }}%</div>
       {% else %}
-        <div class="metric-sub">{% if fd.revenue > 0 and fd.cash %}月商 {{ "%.1f"|format(fd.cash / (fd.revenue / 12)) }}ヶ月分{% else %}—{% endif %}</div>
+        <div class="metric-sub">{% if display_fd.revenue > 0 and display_fd.cash %}月商 {{ "%.1f"|format(display_fd.cash / (display_fd.revenue / period_divisor)) }}ヶ月分{% else %}—{% endif %}</div>
       {% endif %}
       {{ issue_badge('cash') }}
     </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-orange">
       <div class="metric-label">売掛金</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.receivables or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-value">{{ "{:,.0f}".format(display_fd.receivables or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
       <div class="metric-sub">{% if cash_wc and cash_wc.receivables_days %}回収サイクル {{ cash_wc.receivables_days }}日{% else %}—{% endif %}</div>
       {{ issue_badge('receivables') }}
     </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-orange">
       <div class="metric-label">在庫</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.inventory or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-value">{{ "{:,.0f}".format(display_fd.inventory or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
       <div class="metric-sub">{% if cash_wc and cash_wc.inventory_days %}回転サイクル {{ cash_wc.inventory_days }}日{% else %}—{% endif %}</div>
       {{ issue_badge('inventory') }}
     </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-teal">
       <div class="metric-label">総資産</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.total_assets or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.get('total_assets') is not none %}
-        {% set g = result.growth_rates.get('total_assets') %}
-        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      <div class="metric-value">{{ "{:,.0f}".format(display_fd.total_assets or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if growth_data and growth_data.get('total_assets') is not none %}
+        {% set g = growth_data.get('total_assets') %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">会社の資産合計</div>{% endif %}
     </div></div>
   </div>
@@ -696,10 +717,10 @@
   <div class="row g-3 mb-2">
     <div class="col-6 col-md-3"><div class="metric-card c-red">
       <div class="metric-label">有利子負債</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.interest_bearing_debt or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.get('interest_bearing_debt') is not none %}
-        {% set g = result.growth_rates.get('interest_bearing_debt') %}
-        <div class="metric-delta {% if g <= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g <= 0 %}arrow-down{% else %}arrow-up{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      <div class="metric-value">{{ "{:,.0f}".format(display_fd.interest_bearing_debt or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if growth_data and growth_data.get('interest_bearing_debt') is not none %}
+        {% set g = growth_data.get('interest_bearing_debt') %}
+        <div class="metric-delta {% if g <= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g <= 0 %}arrow-down{% else %}arrow-up{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">金利が発生する借入</div>{% endif %}
       {{ issue_badge('interest_bearing_debt') }}
     </div></div>
@@ -710,15 +731,15 @@
     </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-blue">
       <div class="metric-label">純資産</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.equity or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      {% if result.growth_rates and result.growth_rates.get('equity') is not none %}
-        {% set g = result.growth_rates.get('equity') %}
-        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> 前期比 {{ "%+.1f"|format(g) }}%</div>
+      <div class="metric-value">{{ "{:,.0f}".format(display_fd.equity or 0) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      {% if growth_data and growth_data.get('equity') is not none %}
+        {% set g = growth_data.get('equity') %}
+        <div class="metric-delta {% if g >= 0 %}up{% else %}down{% endif %}"><i class="fas fa-{% if g >= 0 %}arrow-up{% else %}arrow-down{% endif %}"></i> {{ growth_label }} {{ "%+.1f"|format(g) }}%</div>
       {% else %}<div class="metric-sub">資本金 + 内部留保</div>{% endif %}
     </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-purple">
       <div class="metric-label">自己資本比率</div>
-      <div class="metric-value">{% if fd.equity and fd.total_assets %}{{ "%.1f"|format(fd.equity / fd.total_assets * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
+      <div class="metric-value">{% if display_fd.equity and display_fd.total_assets %}{{ "%.1f"|format(display_fd.equity / display_fd.total_assets * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
       <div class="metric-sub">30%以上で健全、10%以下で警戒</div>
     </div></div>
   </div>
@@ -727,12 +748,12 @@
   <div class="row g-3 mb-3">
     <div class="col-6 col-md-3"><div class="metric-card c-green">
       <div class="metric-label">流動比率</div>
-      <div class="metric-value">{% if fd.current_liabilities and fd.current_assets %}{{ "%.1f"|format(fd.current_assets / fd.current_liabilities * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
+      <div class="metric-value">{% if display_fd.current_liabilities and display_fd.current_assets %}{{ "%.1f"|format(display_fd.current_assets / display_fd.current_liabilities * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
       <div class="metric-sub">1年以内の支払い余力（120%以上推奨）</div>
     </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-red">
       <div class="metric-label">負債比率</div>
-      <div class="metric-value">{% if fd.equity and fd.total_liabilities %}{{ "%.1f"|format(fd.total_liabilities / fd.equity * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
+      <div class="metric-value">{% if display_fd.equity and display_fd.total_liabilities %}{{ "%.1f"|format(display_fd.total_liabilities / display_fd.equity * 100) }}{% else %}—{% endif %}<span style="font-size:.7em;color:#9ca3af;">%</span></div>
       <div class="metric-sub">100%以下で健全</div>
     </div></div>
     <div class="col-6 col-md-3"><div class="metric-card c-blue">
@@ -842,8 +863,8 @@
           <div class="col-md-5"><canvas id="chartSE" style="max-height: 240px;"></canvas></div>
           <div class="col-md-7"><table class="table table-sm mb-0 small"><thead><tr class="text-muted small"><th>項目</th><th class="text-end">金額(万円)</th><th class="text-end">売上比</th></tr></thead><tbody>
             {% set se_total = se_items|sum(attribute=1) %}
-            {% for name, amount in se_items %}<tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{% if fd.revenue > 0 %}{{ "%.1f"|format(amount / fd.revenue * 100) }}%{% else %}—{% endif %}</td></tr>{% endfor %}
-            <tr class="border-top fw-bold"><td>合計</td><td class="text-end">{{ "{:,.0f}".format(se_total) }}</td><td class="text-end text-muted">{% if fd.revenue > 0 %}{{ "%.1f"|format(se_total / fd.revenue * 100) }}%{% else %}—{% endif %}</td></tr>
+            {% for name, amount in se_items %}<tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{% if display_fd.revenue > 0 %}{{ "%.1f"|format(amount / display_fd.revenue * 100) }}%{% else %}—{% endif %}</td></tr>{% endfor %}
+            <tr class="border-top fw-bold"><td>合計</td><td class="text-end">{{ "{:,.0f}".format(se_total) }}</td><td class="text-end text-muted">{% if display_fd.revenue > 0 %}{{ "%.1f"|format(se_total / display_fd.revenue * 100) }}%{% else %}—{% endif %}</td></tr>
           </tbody></table></div>
         </div>
       </div>
@@ -885,10 +906,10 @@
                 <tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{{ "%.1f"|format(amount / ca_total * 100) if ca_total > 0 else '—' }}%</td></tr>
                 {% endfor %}
                 <tr class="border-top fw-bold"><td>内訳合計</td><td class="text-end">{{ "{:,.0f}".format(ca_total) }}</td><td class="text-end text-muted">100%</td></tr>
-                {% if fd.current_assets and fd.current_assets > 0 %}
-                  {% set gap = fd.current_assets - ca_total %}
-                  <tr class="small text-muted"><td>B/S 流動資産合計</td><td class="text-end">{{ "{:,.0f}".format(fd.current_assets) }}</td><td class="text-end">{% if gap|abs > fd.current_assets * 0.05 %}⚠️ 乖離{% else %}✓{% endif %}</td></tr>
-                  {% if gap|abs > fd.current_assets * 0.05 %}
+                {% if display_fd.current_assets and display_fd.current_assets > 0 %}
+                  {% set gap = display_fd.current_assets - ca_total %}
+                  <tr class="small text-muted"><td>B/S 流動資産合計</td><td class="text-end">{{ "{:,.0f}".format(display_fd.current_assets) }}</td><td class="text-end">{% if gap|abs > display_fd.current_assets * 0.05 %}⚠️ 乖離{% else %}✓{% endif %}</td></tr>
+                  {% if gap|abs > display_fd.current_assets * 0.05 %}
                   <tr class="small" style="color:#0F0F19;"><td colspan="3">⚠️ 内訳と合計で {{ "{:+,.0f}".format(gap) }}万円の乖離。未分類項目あり</td></tr>
                   {% endif %}
                 {% endif %}
@@ -914,9 +935,9 @@
                 <tr><td>{{ name }}</td><td class="text-end fw-semibold">{{ "{:,.0f}".format(amount) }}</td><td class="text-end text-muted">{{ "%.1f"|format(amount / cl_total * 100) if cl_total > 0 else '—' }}%</td></tr>
                 {% endfor %}
                 <tr class="border-top fw-bold"><td>内訳合計</td><td class="text-end">{{ "{:,.0f}".format(cl_total) }}</td><td class="text-end text-muted">100%</td></tr>
-                {% if fd.current_liabilities and fd.current_liabilities > 0 %}
-                  {% set gap = fd.current_liabilities - cl_total %}
-                  <tr class="small text-muted"><td>B/S 流動負債合計</td><td class="text-end">{{ "{:,.0f}".format(fd.current_liabilities) }}</td><td class="text-end">{% if gap|abs > fd.current_liabilities * 0.05 %}⚠️ 乖離{% else %}✓{% endif %}</td></tr>
+                {% if display_fd.current_liabilities and display_fd.current_liabilities > 0 %}
+                  {% set gap = display_fd.current_liabilities - cl_total %}
+                  <tr class="small text-muted"><td>B/S 流動負債合計</td><td class="text-end">{{ "{:,.0f}".format(display_fd.current_liabilities) }}</td><td class="text-end">{% if gap|abs > display_fd.current_liabilities * 0.05 %}⚠️ 乖離{% else %}✓{% endif %}</td></tr>
                 {% endif %}
               </tbody>
             </table>
@@ -1179,13 +1200,13 @@
   <div class="row g-3 mb-3">
     <div class="col-6 col-md-4"><div class="metric-card">
       <div class="metric-label">💰 現預金 期末残高</div>
-      <div class="metric-value">{{ "{:,.0f}".format(fd.cash) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      <div class="metric-sub">{% if fd.revenue > 0 %}月商 {{ "%.1f"|format(fd.cash / (fd.revenue / 12)) }}ヶ月分{% else %}—{% endif %}</div>
+      <div class="metric-value">{{ "{:,.0f}".format(display_fd.cash) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
+      <div class="metric-sub">{% if display_fd.revenue > 0 %}月商 {{ "%.1f"|format(display_fd.cash / (display_fd.revenue / period_divisor)) }}ヶ月分{% else %}—{% endif %}</div>
     </div></div>
     <div class="col-6 col-md-4"><div class="metric-card {% if cash_cf.cash_change < 0 %}has-issue{% endif %}">
       <div class="metric-label">📉 前期比 増減</div>
       <div class="metric-value {% if cash_cf.cash_change < 0 %}text-danger{% endif %}">{{ "{:+,.0f}".format(cash_cf.cash_change) }}<span style="font-size:.7em;color:#9ca3af;">万円</span></div>
-      <div class="metric-sub">{% if cash_cf.cash_change < 0 %}1年で {{ "{:,.0f}".format((cash_cf.cash_change|abs) / 12) }}万円/月のペースで流出{% else %}増加{% endif %}</div>
+      <div class="metric-sub">{% if cash_cf.cash_change < 0 %}{% set cfdiv = cash_cf._period_divisor|default(12) %}{{ cash_cf._period_label|default("1年") }}で {{ "{:,.0f}".format((cash_cf.cash_change|abs) / cfdiv) }}万円/月のペースで流出{% else %}増加{% endif %}</div>
     </div></div>
     {% if cash_burn and cash_burn.runway_months %}
     <div class="col-6 col-md-4"><div class="metric-card {% if cash_burn.runway_months < 12 %}has-issue{% endif %}">
@@ -1913,96 +1934,6 @@
   {% endif %}
 </div>
 
-{# シミュレーター機能は廃止（2026-05-29 ユーザーFB） #}
-<div class="cp-tab-panel" id="panel-simulator" style="display:none !important;" hidden>
-  <h6 class="fw-bold mb-3"><i class="fas fa-sliders-h me-2 text-primary"></i>改善シミュレーター — スライダーで「もしこうしたら」を試す</h6>
-  <div class="small text-muted mb-3">各項目を動かすと、営業利益・スコアの変化が即座に計算されます。
-  施策の効果を社長と一緒に確認するときに使えます。</div>
-
-  <div class="row g-4">
-    <div class="col-md-6">
-      <div class="card p-3">
-        <h6 class="fw-bold mb-3" style="font-size:.95rem;">操作項目</h6>
-        <div class="mb-3">
-          <label class="form-label small fw-semibold d-flex justify-content-between">売上の増減 <span id="simRevLbl">+0.0%</span></label>
-          <input type="range" class="form-range" id="simRev" min="-30" max="50" step="0.5" value="0">
-        </div>
-        <div class="mb-3">
-          <label class="form-label small fw-semibold d-flex justify-content-between">粗利率の改善 <span id="simGmLbl">+0.0pt</span></label>
-          <input type="range" class="form-range" id="simGm" min="-10" max="15" step="0.5" value="0">
-          <div class="form-text small">業界中央値や競合並みに引き上げる場合の試算</div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small fw-semibold d-flex justify-content-between">販管費の増減 <span id="simSeLbl">+0.0%</span></label>
-          <input type="range" class="form-range" id="simSe" min="-30" max="20" step="0.5" value="0">
-        </div>
-        <div class="mb-3">
-          <label class="form-label small fw-semibold d-flex justify-content-between">売掛金回収日数の短縮 <span id="simRecLbl">+0日</span></label>
-          <input type="range" class="form-range" id="simRec" min="-60" max="0" step="1" value="0">
-          <div class="form-text small">回収を早めるとキャッシュ回復額を試算</div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label small fw-semibold d-flex justify-content-between">在庫日数の短縮 <span id="simInvLbl">+0日</span></label>
-          <input type="range" class="form-range" id="simInv" min="-60" max="0" step="1" value="0">
-        </div>
-        <button id="simReset" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo me-1"></i>リセット</button>
-      </div>
-    </div>
-    <div class="col-md-6">
-      <div class="card p-3 h-100" style="background: #F7F7F9;">
-        <h6 class="fw-bold mb-3" style="font-size:.95rem;color:#0F0F19;">改善後の予測</h6>
-
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <div class="small text-muted">売上高</div>
-            <div class="fs-5 fw-bold"><span id="outRev">{{ "{:,.0f}".format(fd.revenue) }}</span><span class="small text-muted">万</span></div>
-            <div class="small" id="outRevDelta" style="color:#E60039;">±0万</div>
-          </div>
-          <div class="col-6">
-            <div class="small text-muted">営業利益</div>
-            <div class="fs-5 fw-bold" id="outOp">{{ "{:+,.0f}".format(fd.operating_profit) }}<span class="small text-muted">万</span></div>
-            <div class="small fw-bold" id="outOpDelta" style="color:#E60039;">±0万</div>
-          </div>
-        </div>
-
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <div class="small text-muted">営業利益率</div>
-            <div class="fs-5 fw-bold" id="outOpRate">{{ "%.1f"|format(fd.operating_profit / fd.revenue * 100 if fd.revenue else 0) }}%</div>
-          </div>
-          <div class="col-6">
-            <div class="small text-muted">粗利</div>
-            <div class="fs-5 fw-bold" id="outGp">{{ "{:,.0f}".format(fd.gross_profit) }}<span class="small text-muted">万</span></div>
-          </div>
-        </div>
-
-        <hr>
-
-        <div class="row g-2 mb-2">
-          <div class="col-6">
-            <div class="small text-muted">回収条件改善でキャッシュ回復</div>
-            <div class="fs-6 fw-bold" id="outCashRec" style="color:#16a34a;">+0万</div>
-          </div>
-          <div class="col-6">
-            <div class="small text-muted">在庫削減でキャッシュ回復</div>
-            <div class="fs-6 fw-bold" id="outCashInv" style="color:#16a34a;">+0万</div>
-          </div>
-        </div>
-        <div class="small text-muted text-center mt-2">合計キャッシュ回復額 <span class="fw-bold" id="outCashTotal" style="color:#16a34a;font-size:1rem;">+0万</span></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card p-3 mt-3" style="background:#f9fafb;">
-    <div class="small fw-semibold mb-2">💡 シミュレーションのコツ</div>
-    <ul class="small text-muted mb-0" style="padding-left:1.2rem;">
-      <li>「売上+5%」「販管費-5%」を組み合わせて少しずつ試すと現実的な改善目標が見える</li>
-      <li>粗利率改善 +5pt は値上げ・原価交渉を本気で実行した時の目安</li>
-      <li>売掛金30日短縮で生まれるキャッシュは、運転資金の余裕として使える</li>
-      <li>このシミュレーションは単純計算。実際は売上増→売掛金増、コスト削減→売上影響など連動あり</li>
-    </ul>
-  </div>
-</div>
 {% endif %}
 {% endblock %}
 
@@ -2284,75 +2215,6 @@
     });
     {% endif %}
   })();
-
-  // ========== 改善シミュレーター ==========
-  const baseRev = {{ fd.revenue or 0 }};
-  const baseCos = {{ fd.cost_of_sales or 0 }};
-  const baseGp  = {{ fd.gross_profit or 0 }};
-  const baseSe  = {{ fd.selling_expenses or 0 }};
-  const baseOp  = {{ fd.operating_profit or 0 }};
-  const baseRec = {{ fd.receivables or 0 }};
-  const baseInv = {{ fd.inventory or 0 }};
-  const baseGmRate = baseRev > 0 ? (baseGp / baseRev * 100) : 0;
-  const recDays = (baseRev > 0 && baseRec > 0) ? (baseRec / baseRev * 365) : 0;
-  const invDays = (baseCos > 0 && baseInv > 0) ? (baseInv / baseCos * 365) : 0;
-
-  function fmt(n) { return n.toLocaleString('ja-JP', {maximumFractionDigits: 0}); }
-  function fmtPct(n) { return (n>=0?'+':'') + n.toFixed(1) + '%'; }
-  function fmtDelta(n) { return (n>=0?'+':'') + fmt(n) + '万'; }
-
-  function runSim() {
-    const dRev = parseFloat(document.getElementById('simRev').value);
-    const dGm  = parseFloat(document.getElementById('simGm').value);
-    const dSe  = parseFloat(document.getElementById('simSe').value);
-    const dRec = parseFloat(document.getElementById('simRec').value);
-    const dInv = parseFloat(document.getElementById('simInv').value);
-
-    document.getElementById('simRevLbl').textContent = fmtPct(dRev);
-    document.getElementById('simGmLbl').textContent  = (dGm>=0?'+':'') + dGm.toFixed(1) + 'pt';
-    document.getElementById('simSeLbl').textContent  = fmtPct(dSe);
-    document.getElementById('simRecLbl').textContent = (dRec>=0?'+':'') + dRec + '日';
-    document.getElementById('simInvLbl').textContent = (dInv>=0?'+':'') + dInv + '日';
-
-    const newRev = baseRev * (1 + dRev/100);
-    const newGmRate = Math.max(0, Math.min(100, baseGmRate + dGm));
-    const newGp = newRev * newGmRate / 100;
-    const newSe = baseSe * (1 + dSe/100);
-    const newOp = newGp - newSe;
-    const newOpRate = newRev > 0 ? newOp / newRev * 100 : 0;
-
-    document.getElementById('outRev').textContent = fmt(newRev);
-    document.getElementById('outRevDelta').textContent = fmtDelta(newRev - baseRev);
-    document.getElementById('outRevDelta').style.color = (newRev >= baseRev) ? '#16a34a' : '#E60039';
-
-    document.getElementById('outOp').innerHTML = (newOp>=0?'+':'') + fmt(newOp) + '<span class="small text-muted">万</span>';
-    document.getElementById('outOpDelta').textContent = fmtDelta(newOp - baseOp);
-    document.getElementById('outOpDelta').style.color = (newOp >= baseOp) ? '#16a34a' : '#E60039';
-
-    document.getElementById('outOpRate').textContent = newOpRate.toFixed(1) + '%';
-    document.getElementById('outGp').innerHTML = fmt(newGp) + '<span class="small text-muted">万</span>';
-
-    // キャッシュ回復額（売掛金日数短縮 × 月商）
-    const cashRec = recDays > 0 && dRec < 0 ? (newRev / 365) * (-dRec) : 0;
-    const cashInv = invDays > 0 && dInv < 0 ? (baseCos * (1 + dRev/100 + dGm/100*0.5) / 365) * (-dInv) : 0;
-    document.getElementById('outCashRec').textContent = '+' + fmt(cashRec) + '万';
-    document.getElementById('outCashInv').textContent = '+' + fmt(cashInv) + '万';
-    document.getElementById('outCashTotal').textContent = '+' + fmt(cashRec + cashInv) + '万';
-  }
-
-  ['simRev','simGm','simSe','simRec','simInv'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', runSim);
-  });
-  const simReset = document.getElementById('simReset');
-  if (simReset) simReset.addEventListener('click', () => {
-    ['simRev','simGm','simSe','simRec','simInv'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = 0;
-    });
-    runSim();
-  });
-  runSim();
 
   // 時系列トレンド
   {% if result.trend_metrics and result.trend_metrics.periods and result.trend_metrics.periods|length >= 2 %}
