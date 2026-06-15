@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os
+import threading
 from fastapi import FastAPI, Request, Form, Depends, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +28,34 @@ from .claude_client import (
 )
 
 BASE_DIR = Path(__file__).parent
+
+# ───────────────────────────────────────────────────────────
+# AI分析の二重起動ガード（連打による多重API課金を防止）
+# 同一 fd_id の分析が走っている間は、後続の run リクエストを弾く。
+# プロセス内メモリ（単一 uvicorn プロセス前提・プロトタイプ用途）。
+# ───────────────────────────────────────────────────────────
+_analysis_inflight: set[int] = set()
+_analysis_inflight_lock = threading.Lock()
+
+
+def _try_acquire_analysis(fd_id: int) -> bool:
+    """fd_id の分析を開始してよければ True（ロック取得）。既に走っていれば False。"""
+    with _analysis_inflight_lock:
+        if fd_id in _analysis_inflight:
+            return False
+        _analysis_inflight.add(fd_id)
+        return True
+
+
+def _release_analysis(fd_id: int) -> None:
+    with _analysis_inflight_lock:
+        _analysis_inflight.discard(fd_id)
+
+
+def _is_analysis_inflight(fd_id: int) -> bool:
+    with _analysis_inflight_lock:
+        return fd_id in _analysis_inflight
+
 
 app = FastAPI(title="CoPartner — 税理士のためのAI財務分析")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -1081,7 +1110,9 @@ def compare_page(client_id: int, request: Request, ids: str = "", errors: str = 
 
 # --- 単年AI分析 ---
 @app.get("/financials/{fd_id}/analyze", response_class=HTMLResponse)
-def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
+def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db), run: int = 0):
+    # run=0: 通常アクセス。キャッシュがあれば結果、無ければ「生成中」画面を返す（AIは走らせない）
+    # run=1: ローディング画面のJSからの非同期キック。実際にAIを呼んで分析を生成・保存する
     user = get_current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -1340,6 +1371,15 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             _cache_eff_period = _cached_sub.get("effective_period")
             if (_cache_eff_type != _curr_eff_type) or (_cache_eff_period != _curr_eff_period):
                 print(f"[キャッシュ無効化] effective_fd 変更検知: cache={_cache_eff_type}/{_cache_eff_period} → current={_curr_eff_type}/{_curr_eff_period}", flush=True)
+                # この古い行は今後も描画されない（effective_fd 不一致）。
+                # DBに残すと /analyze/status が誤って done を返し、結果ページ→再無効化→
+                # ローディングのリダイレクトループになる。削除してDB状態を正す
+                # （analyze_page と status が同じ状態を見て一致する）。
+                try:
+                    db.delete(existing); db.commit()
+                except Exception as _de:
+                    db.rollback()
+                    print(f"[キャッシュ無効化] 古い行の削除に失敗（無視して続行）: {_de}", flush=True)
                 existing = None  # bypass
         except Exception as _e:
             print(f"[キャッシュ整合性チェック] skip: {_e}", flush=True)
@@ -1370,6 +1410,21 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             "analysis_id": existing.id, "cached": True,
             "dismissed_solutions": dismissed_sols,
         })
+
+    # ── キャッシュ無し ──────────────────────────────────────────
+    # run=0（通常アクセス／ボタン押下）: AIは走らせず、まず「生成中」画面を即返す。
+    #   画面のJSが run=1 でこのエンドポイントを非同期に叩いて生成を開始し、
+    #   /analyze/status をポーリングして完了したら結果ページへ遷移する。
+    if not run:
+        return templates.TemplateResponse("analyzing.html", {
+            "request": request, "user": user, "client": cl, "fd": fd,
+            "inflight": _is_analysis_inflight(fd_id),
+        })
+
+    # run=1（非同期キック）: 二重起動ガード。既に同じ期の分析が走っていれば
+    #   新規にAIを呼ばず running を返す（連打による多重API課金を防止）。
+    if not _try_acquire_analysis(fd_id):
+        return JSONResponse({"status": "running"})
 
     try:
         # 保存されたヒアリング回答を business_details に追記（AI に文脈として渡す）
@@ -1433,15 +1488,9 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             result["fd_substitution"] = fd_substitution_meta
         analysis = Analysis(financial_data_id=fd_id, result_json=json.dumps(result, ensure_ascii=False))
         db.add(analysis); db.commit(); db.refresh(analysis)
-        return templates.TemplateResponse("analysis.html", {
-            "request": request, "user": user, "client": cl, "fd": fd, "effective_fd": effective_fd, "result": result, "fd_substitution_meta": fd_substitution_meta,
-            "breakdown": breakdown,
-            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
-            "expense_groups": expense_groups,
-            "aggregation_meta": aggregation_meta,
-            "monthly_chart_data": monthly_chart_data,
-            "analysis_id": analysis.id, "cached": False
-        })
+        # run=1（非同期キック）からの呼び出し。結果はキャッシュに保存済みなので
+        # JSONで完了を返す。画面側は /analyze（run=0）へ遷移して結果を表示する。
+        return JSONResponse({"status": "done", "analysis_id": analysis.id})
     except Exception as e:
         err_str = str(e)
         if '429' in err_str or 'rate_limit' in err_str:
@@ -1450,14 +1499,32 @@ def analyze_page(fd_id: int, request: Request, db: Session = Depends(get_db)):
             friendly_err = "🔥 AIサーバが混雑中です。5分ほど待ってから再分析してください。"
         else:
             friendly_err = err_str
-        return templates.TemplateResponse("analysis.html", {
-            "request": request, "user": user, "client": cl, "fd": fd, "effective_fd": effective_fd, "result": None,
-            "fd_substitution_meta": fd_substitution_meta,
-            "breakdown": breakdown,
-            "cash_burn": cash_burn, "cash_wc": cash_wc, "cash_ebitda": cash_ebitda, "cash_cf": cash_cf,
-            "expense_groups": expense_groups,
-            "error": friendly_err, "cached": False, "analysis_id": None
-        })
+        return JSONResponse({"status": "error", "error": friendly_err}, status_code=500)
+    finally:
+        # 成功・失敗どちらでも二重起動ガードを解放
+        _release_analysis(fd_id)
+
+
+@app.get("/financials/{fd_id}/analyze/status")
+def analyze_status(fd_id: int, request: Request, db: Session = Depends(get_db)):
+    """ローディング画面のポーリング用。分析がキャッシュ済みか／生成中かを返す。"""
+    user = get_current_user(request, db)
+    if not user:
+        return JSONResponse({"status": "error", "error": "unauthenticated"}, status_code=401)
+    # 所有権チェック（fd → client → user）
+    fd = db.query(FinancialData).filter(FinancialData.id == fd_id).first()
+    if not fd:
+        return JSONResponse({"status": "error", "error": "not_found"}, status_code=404)
+    cl = db.query(Client).filter(Client.id == fd.client_id, Client.user_id == user.id).first()
+    if not cl:
+        return JSONResponse({"status": "error", "error": "forbidden"}, status_code=403)
+    existing = db.query(Analysis).filter(Analysis.financial_data_id == fd_id).order_by(Analysis.created_at.desc()).first()
+    if existing:
+        return JSONResponse({"status": "done", "analysis_id": existing.id})
+    if _is_analysis_inflight(fd_id):
+        return JSONResponse({"status": "running"})
+    return JSONResponse({"status": "idle"})
+
 
 async def _save_hearing_form(client_id: int, request: Request, db: Session):
     user = get_current_user(request, db)
