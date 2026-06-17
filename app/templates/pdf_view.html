@@ -129,6 +129,9 @@
     .pdfv { padding: 0; }
     /* カバー直後と「課題への提案」セクションだけ改ページ。それ以外は自然な流れ */
     .pdf-cover { page-break-after: always; padding: 90px 50px; min-height: calc(297mm - 24mm); display: flex; flex-direction: column; justify-content: center; }
+    /* 掴みの1ページ（①危機感→②助言→③提案）はカバー直後の独立ページ */
+    .pdf-hook { page-break-after: always; }
+    .pdf-hook .hook-block { page-break-inside: avoid; }
     .pdf-section { page-break-before: auto; page-break-inside: auto; }
     .issue-card, .solution-card, .tax-card, .conclusion-block, .strength-block, .kpi-card { page-break-inside: avoid; }
     /* 大見出しはコンテンツと一緒に */
@@ -152,6 +155,117 @@
       作成日: {% if fd.created_at %}{{ fd.created_at.strftime('%Y年%m月%d日') }}{% endif %}
     </div>
   </div>
+
+  {# 数値フォーマット（万円ベース → 億/万） #}
+  {% macro fmtv(v) %}{% if v is number %}{% if v|abs >= 10000 %}{{ "%.1f"|format(v/10000) }}億{% else %}{{ "{:,.0f}".format(v) }}万{% endif %}{% endif %}{% endmacro %}
+
+  {# ミニ推移グラフ：各点に実数値ラベル＋期ラベル。引き伸ばさず読みやすく #}
+  {% macro minitrend(arr, periods, color) %}
+    {% set n = arr|length %}
+    {% set lo = arr|min %}{% set hi = arr|max %}{% set rng = (hi - lo) if (hi - lo) != 0 else 1 %}
+    <svg width="100%" height="82" viewBox="0 0 240 82" preserveAspectRatio="xMidYMid meet" style="margin-top:10px;overflow:visible;">
+      {# 折れ線 #}
+      {% for y in arr %}{% if not loop.first %}
+        {% set pcx = 22 + (loop.index0 - 1) * ((240 - 44) / (n - 1)) %}
+        {% set pcy = 52 - ((arr[loop.index0 - 1] - lo) / rng * 34) %}
+        {% set cx = 22 + loop.index0 * ((240 - 44) / (n - 1)) %}
+        {% set cy = 52 - ((y - lo) / rng * 34) %}
+        <line x1="{{ pcx|round(1) }}" y1="{{ pcy|round(1) }}" x2="{{ cx|round(1) }}" y2="{{ cy|round(1) }}" stroke="{{ color }}" stroke-width="2.2"/>
+      {% endif %}{% endfor %}
+      {# 各点＋数値ラベル＋期ラベル #}
+      {% for y in arr %}
+        {% set cx = 22 + loop.index0 * ((240 - 44) / (n - 1)) %}
+        {% set cy = 52 - ((y - lo) / rng * 34) %}
+        <circle cx="{{ cx|round(1) }}" cy="{{ cy|round(1) }}" r="2.8" fill="{{ color }}"/>
+        <text x="{{ cx|round(1) }}" y="{{ (cy - 7)|round(1) }}" font-size="9.5" font-weight="700" fill="{{ color }}" text-anchor="middle">{{ fmtv(y) }}</text>
+        <text x="{{ cx|round(1) }}" y="72" font-size="8" fill="#9CA3AF" text-anchor="middle">{{ periods[loop.index0][:5] if (periods and periods|length > loop.index0) else '' }}</text>
+      {% endfor %}
+    </svg>
+  {% endmacro %}
+
+  {# ========== 掴みの1ページ（手を止める1行 → 3つの信号 → 打ち手 → 社長メッセージ）========== #}
+  {# モック「案D」準拠。抽象スコアは出さず、社長が分かる具体信号で危機感→助言→提案 #}
+  {% if result.key_insight or result.prioritized_problems or result.owner_message %}
+  <div class="pdf-hook">
+
+    {# 手を止める1行 #}
+    {% if result.key_insight %}
+    <div class="hook-block" style="margin-bottom:20px;">
+      <div style="font-size:11px;letter-spacing:.1em;color:var(--rk-text-muted);font-weight:700;margin-bottom:8px;">経営状況のいちばん大事なポイント</div>
+      <div style="font-size:24px;font-weight:900;line-height:1.5;color:var(--rk-black);">{{ result.key_insight }}</div>
+    </div>
+    {% endif %}
+
+    {# いま起きていること（3つの信号）：上位課題を具体数字＋推移ミニグラフで #}
+    {% set probs = (result.prioritized_problems or [])[:3] %}
+    {% if probs %}
+    {% set tm = result.trend_metrics or {} %}
+    {% set mlabels = {'cash':'現預金','revenue':'売上','gross_profit':'粗利','operating_profit':'営業利益','net_profit':'純利益','ordinary_profit':'経常利益','total_assets':'総資産','equity':'純資産','interest_bearing_debt':'借入','selling_expenses':'販管費','cost_of_sales':'売上原価'} %}
+    <div class="hook-block" style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:800;color:var(--rk-black);margin-bottom:12px;">⚠ いま、この会社で起きていること</div>
+      <div style="display:flex;gap:14px;align-items:stretch;">
+        {% for p in probs %}
+        {% set sev = p.severity or '' %}
+        {% set sevcol = '#E60039' if '高' in sev else ('#D97706' if '中' in sev else '#9CA3AF') %}
+        <div style="flex:1;background:#fff;border:1px solid var(--rk-border,#E5E7EB);border-top:3px solid {{ sevcol }};border-radius:8px;padding:14px 16px;page-break-inside:avoid;">
+          <div style="font-size:13px;font-weight:800;color:var(--rk-black);line-height:1.45;margin-bottom:6px;">{{ p.title }}</div>
+          {% if p.fact %}<div style="font-size:11px;color:var(--rk-text-muted);line-height:1.65;">{{ p.fact|truncate(76) }}</div>{% endif %}
+          {# 推移ミニグラフ：カードの話（title+fact）に合う指標を選ぶ。
+             構成比系（依存・集中・シェア）は推移で表せないのでグラフを出さない #}
+          {% set text = (p.title or '') ~ (p.fact or '') %}
+          {% set mk = namespace(key=None) %}
+          {% if not (('依存' in text) or ('集中' in text) or ('構成比' in text) or ('シェア' in text)) %}
+            {% set kwmap = [(['現金','キャッシュ','CF','資金','預金','ランウェイ','流出'],'cash'),
+                            (['借入','返済','負債'],'interest_bearing_debt'),
+                            (['粗利','原価'],'gross_profit'),
+                            (['純利益'],'net_profit'),
+                            (['営業利益','本業','黒字','赤字'],'operating_profit'),
+                            (['販管費','人件費','経費'],'selling_expenses'),
+                            (['売上','受注'],'revenue')] %}
+            {% for kws, mkey in kwmap %}{% if mk.key is none %}
+              {% for kw in kws %}{% if mk.key is none and kw in text %}{% set mk.key = mkey %}{% endif %}{% endfor %}
+            {% endif %}{% endfor %}
+          {% endif %}
+          {# trend_metrics に有効な系列があれば推移グラフ。
+             無く、かつ構成比（依存度）データがあれば構成比バー #}
+          {% if mk.key and mk.key in tm and tm[mk.key] and tm[mk.key]|length >= 2 and (tm[mk.key]|select('number')|list|length) == (tm[mk.key]|length) %}
+          <div style="font-size:10px;color:#9CA3AF;margin-top:10px;font-weight:700;">{{ mlabels[mk.key] if mk.key in mlabels else mk.key }}の推移</div>
+          {{ minitrend(tm[mk.key], tm.periods, sevcol) }}
+          {% elif p._concentration %}
+          {% set cp = p._concentration %}
+          <div style="font-size:11px;font-weight:700;color:var(--rk-black);margin-top:12px;margin-bottom:5px;">{{ cp.label }}に <span style="color:{{ sevcol }};">{{ cp.pct }}%</span> 集中</div>
+          <div style="display:flex;height:18px;border-radius:5px;overflow:hidden;border:1px solid var(--rk-border,#E5E7EB);">
+            <div style="width:{{ cp.pct }}%;background:{{ sevcol }};"></div>
+            <div style="flex:1;background:#F1F2F4;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#9CA3AF;margin-top:3px;">
+            <span>{{ cp.label }} {{ cp.pct }}%</span><span>その他 {{ (100 - cp.pct)|round(1) }}%</span>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# だから、まず打つべきは #}
+    {% if result.owner_what_to_do %}
+    <div class="hook-block" style="background:#FFF1F4;border-radius:8px;padding:16px 20px;border-left:4px solid var(--rk-accent);margin-bottom:18px;">
+      <div style="font-size:12px;letter-spacing:.05em;color:var(--rk-accent);font-weight:700;">✅ だから、まず打つべきは</div>
+      <div style="font-size:15px;line-height:1.7;color:var(--rk-black);margin-top:6px;">{{ result.owner_what_to_do }}</div>
+    </div>
+    {% endif %}
+
+    {# 社長へのメッセージ #}
+    {% if result.owner_message %}
+    <div class="hook-block" style="border-top:1px solid var(--rk-border,#E5E7EB);padding-top:16px;">
+      <div style="font-size:12px;letter-spacing:.05em;color:var(--rk-text-muted);font-weight:700;margin-bottom:8px;">👔 社長へのメッセージ <span style="font-weight:500;">— 専門用語抜きの易しい言葉で</span></div>
+      <div style="font-size:15px;line-height:1.85;color:var(--rk-black);font-weight:500;">{{ result.owner_message }}</div>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
 
   {# ========== 01 業績サマリー ========== #}
   {% if pdf_content.section1_performance %}

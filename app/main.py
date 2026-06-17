@@ -1691,6 +1691,36 @@ def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
     filtered_result = dict(result)
     filtered_result["prioritized_problems"] = filtered_problems
 
+    # 掴みページ用：構成比（取引先依存など）の信号は推移グラフで表せないため、
+    # 課題文から「最大主体名」と「集中度%」を抽出して構成比バー用データを作る。
+    import re as _re_conc
+    _conc_kw = ("依存", "集中", "シェア", "構成比")
+    for _p in filtered_result["prioritized_problems"][:3]:
+        _txt = (_p.get("title") or "") + " " + (_p.get("fact") or "")
+        if any(k in _txt for k in _conc_kw):
+            # 社名の直後の括弧内%（例「いであ㈱が…（77.0%）」）を最優先で取る。
+            # こうすると「利益率0.2%…1社77%」のように非依存の%が先頭にあっても誤らない。
+            _pct_str = None
+            _label = "最大の取引先"
+            _paired = _re_conc.search(r"([^\s、。（）()]{1,14}(?:㈱|株式会社))[^（(]{0,16}[（(]\s*(\d+(?:\.\d+)?)\s*[%％]", _txt)
+            if _paired:
+                _label = _paired.group(1)
+                _pct_str = _paired.group(2)
+            else:
+                # フォールバック：文中最初の% ＋ 取れれば社名
+                _m = _re_conc.search(r"(\d+(?:\.\d+)?)\s*[%％]", _txt)
+                _pct_str = _m.group(1) if _m else None
+                _nm = _re_conc.search(r"([^\s、。（）()]{1,14}(?:㈱|株式会社))", _txt)
+                if _nm:
+                    _label = _nm.group(1)
+            if _pct_str:
+                try:
+                    _pct = float(_pct_str)
+                except Exception:
+                    _pct = None
+                if _pct is not None and 0 < _pct <= 100:
+                    _p["_concentration"] = {"pct": round(_pct, 1), "label": _label}
+
     pdf_content = filtered_result.get("owner_pdf_content")
 
     # 削除を変更してキャッシュ無効化されていれば再生成
