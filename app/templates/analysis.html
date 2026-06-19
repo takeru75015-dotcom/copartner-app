@@ -282,6 +282,7 @@
 <div class="cp-tabs" id="cpTabs">
   <div class="cp-tab active" data-tab="overview">📊 数値サマリー</div>
   <div class="cp-tab" data-tab="advice">💡 提案・打ち手</div>
+  <div class="cp-tab" data-tab="taxsim">🧮 施策効果シミュレーター</div>
   <div class="cp-tab" data-tab="services">🛍 提案可能サービス</div>
   <div class="cp-tab" data-tab="subsidies">🎯 提案可能補助金</div>
   <div class="cp-tab" data-tab="deepdive">🔬 詳細分析</div>
@@ -1935,6 +1936,58 @@
 </div>
 
 {% endif %}
+
+{# ════════ 🧮 節税シミュレーター（確定系の打ち手→PL/BS/CF連動） ════════ #}
+<div class="cp-tab-panel" id="panel-taxsim" data-fd-id="{{ fd.id }}">
+  <div class="d-flex align-items-center justify-content-between flex-wrap mb-2">
+    <h5 class="mb-0">🧮 施策効果シミュレーター（節税・手取り・売上・コスト）</h5>
+  </div>
+  <p class="text-muted small mb-3">打ち手にチェック → 金額を調整すると、PL/BS/CF がその場で再計算されます。
+    <b>税は全部反映してから1回だけ再計算</b>。数字は概算（税率・制度限度額は要確認）。</p>
+
+  <div class="mb-3">
+    <span class="small text-muted me-2">並び替え（会社のニーズ）:</span>
+    <div class="btn-group btn-group-sm" role="group" id="taxsimNeeds"></div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div id="taxsimList"><div class="text-muted small">読み込み中…</div></div>
+    </div>
+    <div class="col-lg-5">
+      <div class="card p-3" style="position:sticky;top:12px;">
+        <div class="fw-bold mb-2">施策後の着地（試算）</div>
+        <table class="table table-sm mb-2 small" id="taxsimResult"><tbody></tbody></table>
+        <div id="taxsimSummary" class="small mb-2"></div>
+        <div id="taxsimPersonal" class="small p-2" style="background:#F7F7F9;border-radius:8px;display:none;"></div>
+        <div class="small text-muted mt-2" id="taxsimAssumeNote" style="display:none;">
+          ※「仮定込み」は売上施策（不確実）を上乗せした楽観値。堅いのは「確定」列です。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── 複数年キャッシュ推移（概算） ── #}
+  <div class="card p-3 mt-3">
+    <div class="d-flex align-items-center justify-content-between flex-wrap mb-2">
+      <div class="fw-bold">📈 複数年のキャッシュ推移（概算）</div>
+      <div class="d-flex align-items-center gap-2 small">
+        <span class="text-muted">年</span>
+        <select id="taxprojYears" class="form-select form-select-sm" style="width:70px">
+          <option value="3" selected>3年</option><option value="5">5年</option>
+        </select>
+        <span class="text-muted">利益成長</span>
+        <input type="number" id="taxprojGrowth" class="form-control form-control-sm" style="width:80px" value="3" step="1"><span class="text-muted">%</span>
+        <span class="text-muted" title="決算書の有利子負債から推定（要編集）。正確な返済額は決算書だけでは出ないため概算です">借入の年間返済<span style="color:#b45309">（推定）</span></span>
+        <input type="number" id="taxprojRepay" class="form-control form-control-sm" style="width:90px" value="0" step="50"><span class="text-muted">万円</span>
+      </div>
+    </div>
+    <p class="small text-muted mb-2">チェックした<b>確定の打ち手</b>を毎年継続した前提で、現金がどう動くかの概算。
+      <span id="taxprojNote"></span></p>
+    <table class="table table-sm small mb-0" id="taxprojTable"><tbody></tbody></table>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -2441,5 +2494,186 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
     setTimeout(() => { btn.innerHTML = old; }, 2000);
   });
 });
+</script>
+
+{# ════════ 🧮 節税シミュレーターのロジック ════════ #}
+<script>
+(function(){
+  const panel = document.getElementById('panel-taxsim');
+  if (!panel) return;
+  const fdId = panel.dataset.fdId;
+  const listEl = document.getElementById('taxsimList');
+  const needsEl = document.getElementById('taxsimNeeds');
+  const resultEl = document.querySelector('#taxsimResult tbody');
+  const summaryEl = document.getElementById('taxsimSummary');
+  const personalEl = document.getElementById('taxsimPersonal');
+  const assumeNoteEl = document.getElementById('taxsimAssumeNote');
+  const projTableEl = document.querySelector('#taxprojTable tbody');
+  const yearsEl = document.getElementById('taxprojYears');
+  const growthEl = document.getElementById('taxprojGrowth');
+  const repayEl = document.getElementById('taxprojRepay');
+  let state = {};          // id -> {enabled, amount(万円)}
+  let need = 'perf';
+  let needs = [];
+  let repayPrefilled = false;
+
+  // 金額は全て万円単位（サーバー/DBと統一）
+  const man = v => Math.round(v||0).toLocaleString();
+  const sign = v => (v>0?'+':'') + man(v) + '万';
+
+  function renderNeeds(){
+    needsEl.innerHTML = needs.map(n =>
+      `<button type="button" class="btn ${n.key===need?'btn-dark':'btn-outline-secondary'}" data-need="${n.key}">${n.label}</button>`
+    ).join('');
+    needsEl.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ need=b.dataset.need; load(); }));
+  }
+
+  function renderList(proposals){
+    listEl.innerHTML = proposals.map(p=>{
+      const st = state[p.id] || {};
+      const amt = (st.amount!=null ? st.amount : p.default_amount);
+      const checked = st.enabled ? 'checked' : '';
+      const si = p.single_impact || {};
+      const cav = (p.caveats||[]).map(c=>`<li>${c}</li>`).join('');
+      const calc = (p.calc_explain||[]).map(c=>`<li>${c}</li>`).join('');
+      const mn = (p.min!=null) ? `min="${p.min}"` : '';   // null=無制限（役員報酬は減額可）
+      const mx = (p.max!=null) ? `max="${p.max}"` : '';   // 共済等の上限
+      const assumed = (p.certainty==='仮定');
+      const parts=[];
+      if (si.profit_effect)       parts.push(`利益 ${sign(si.profit_effect)}`);
+      if (si.corp_tax_saving)     parts.push(`法人税 ${sign(si.corp_tax_saving)}`);
+      if (si.cash_effect)         parts.push(`現金 ${sign(si.cash_effect)}`);
+      if (si.personal_tax_saving) parts.push(`個人税 ${sign(si.personal_tax_saving)}`);
+      if (si.personal_takehome)   parts.push(`手取り ${sign(si.personal_takehome)}`);
+      const impact = parts.join(' ／ ');
+      return `
+      <div class="card p-2 mb-2">
+        <div class="d-flex align-items-start gap-2">
+          <input type="checkbox" class="form-check-input mt-1" data-id="${p.id}" ${checked}>
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="fw-bold">${p.title}</span>
+              <span class="badge ${assumed?'bg-warning text-dark':'bg-light text-dark'}">${assumed?'仮定':p.category}・${p.target}・実行${p.effort}/5</span>
+            </div>
+            <div class="small text-muted">${p.description}</div>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <input type="number" class="form-control form-control-sm" style="width:110px" data-amt="${p.id}" value="${Math.round(amt||0)}" step="10" ${mn} ${mx}>
+              <span class="small text-muted">万円/年</span>
+            </div>
+            <div class="small mt-1" style="color:#0F0F19;">${impact || '—'}</div>
+            <details class="small mt-1"><summary style="cursor:pointer;color:#E60039;">詳しく（解説・計算根拠・注意）</summary>
+              <div class="mt-1">${p.explanation || ''}</div>
+              ${calc ? `<div class="mt-2 fw-bold">計算の根拠（前提つき）</div><ul class="mb-0">${calc}</ul>` : ''}
+              <div class="mt-2 fw-bold">注意</div><ul class="mb-0">${cav}</ul>
+            </details>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    listEl.querySelectorAll('input[type=checkbox]').forEach(c=>c.addEventListener('change',()=>{
+      const id=c.dataset.id; state[id]=state[id]||{}; state[id].enabled=c.checked; ensureAmount(id); recompute();
+    }));
+    listEl.querySelectorAll('input[data-amt]').forEach(i=>i.addEventListener('input',()=>{
+      const id=i.dataset.amt; state[id]=state[id]||{}; state[id].amount=(parseFloat(i.value)||0); recompute();
+    }));
+  }
+
+  function ensureAmount(id){
+    if (state[id] && state[id].amount==null){
+      const inp = listEl.querySelector(`input[data-amt="${id}"]`);
+      state[id].amount = inp ? (parseFloat(inp.value)||0) : 0;
+    }
+  }
+
+  function renderResult(sim){
+    if(!sim || !sim.base){ return; }
+    const b=sim.base, a=sim.after, w=sim.after_with_assumptions||sim.after;
+    const showW = !!sim.has_assumption;
+    const hd = showW
+      ? `<tr class="text-muted small"><th>項目(万円)</th><th class="text-end">現状</th><th class="text-end">確定後</th><th class="text-end">仮定込み</th></tr>`
+      : `<tr class="text-muted small"><th>項目(万円)</th><th class="text-end">現状</th><th></th><th class="text-end">施策後</th></tr>`;
+    const row=(label,bv,av,wv)=> showW
+      ? `<tr><td>${label}</td><td class="text-end text-muted">${man(bv)}</td><td class="text-end fw-bold">${man(av)}</td><td class="text-end" style="color:#b45309">${man(wv)}</td></tr>`
+      : `<tr><td>${label}</td><td class="text-end text-muted">${man(bv)}</td><td class="text-end">→</td><td class="text-end fw-bold">${man(av)}</td></tr>`;
+    resultEl.innerHTML = hd +
+      row('営業利益', b.operating_profit, a.operating_profit, w.operating_profit)+
+      row('税引前(経常)', b.pretax, a.pretax, w.pretax)+
+      row('法人税(試算)', b.corp_tax, a.corp_tax, w.corp_tax)+
+      row('当期純利益', b.net, a.net, w.net)+
+      row('現預金', b.cash, a.cash, w.cash)+
+      row('純資産', b.equity, a.equity, w.equity);
+    const s=sim.summary||{};
+    summaryEl.innerHTML = `<div>法人税 <b>${sign(s.corp_tax_saving)}</b>（節税）／会社の現金 <b>${sign(s.cash_effect)}</b></div>`;
+    renderPersonal(sim.personal);
+    assumeNoteEl.style.display = showW ? '' : 'none';
+  }
+
+  function renderPersonal(pb){
+    if(!pb || (!pb.salary_gross && !pb.nontax_takehome && !pb.kyosai_saving)){
+      personalEl.style.display='none'; return;
+    }
+    personalEl.style.display='';
+    let html = `<div class="fw-bold mb-1">社長個人の手取り（概算レンジ）</div>`;
+    if(pb.salary_gross){
+      html += `<div>役員報酬 額面 <b>${sign(pb.salary_gross)}</b></div>`+
+              `<div>− 税・社保 約 ${man(pb.deduct_low)}〜${man(pb.deduct_high)}万</div>`;
+    }
+    if(pb.nontax_takehome) html += `<div>＋ 非課税の手取り（日当等） ${sign(pb.nontax_takehome)}</div>`;
+    if(pb.kyosai_saving)   html += `<div>＋ 共済の節税分 ${sign(pb.kyosai_saving)}</div>`;
+    html += `<div class="mt-1">→ 手取り <b>約 ${man(pb.takehome_low)}〜${man(pb.takehome_high)}万</b></div>`;
+    personalEl.innerHTML = html;
+  }
+
+  function selections(){
+    return Object.entries(state).filter(([id,s])=>s.enabled)
+      .map(([id,s])=>({id:id, amount:s.amount||0}));
+  }
+
+  function recompute(){
+    fetch(`/financials/${fdId}/tax-simulate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selections:selections()})})
+      .then(r=>r.json()).then(renderResult).catch(()=>{});
+    project();
+  }
+
+  function project(){
+    const body={
+      selections: selections(),
+      years: parseInt(yearsEl && yearsEl.value, 10) || 3,
+      growth: (parseFloat(growthEl && growthEl.value)||0)/100,
+      loan_repay: parseFloat(repayEl && repayEl.value)||0
+    };
+    fetch(`/financials/${fdId}/tax-project`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(r=>r.json()).then(renderProject).catch(()=>{});
+  }
+
+  function renderProject(pj){
+    if(!pj || !pj.rows || !projTableEl){ return; }
+    const head=`<tr class="text-muted small"><th>項目(万円)</th>`+pj.rows.map(r=>`<th class="text-end">${r.year===0?'現在':'+'+r.year+'年'}</th>`).join('')+`</tr>`;
+    const line=(label,key,cls)=>`<tr><td>${label}</td>`+pj.rows.map(r=>`<td class="text-end ${cls||''}">${man(r[key])}</td>`).join('')+`</tr>`;
+    projTableEl.innerHTML = head +
+      line('税引前','pretax')+ line('法人税','corp_tax')+ line('純利益','net')+
+      line('現預金','cash','fw-bold');
+    const note=document.getElementById('taxprojNote');
+    if(note) note.textContent = `（成長${Math.round((pj.assumptions.growth||0)*100)}%・年返済${man(pj.assumptions.loan_repay)}万。${pj.note||''}）`;
+  }
+
+  function load(){
+    fetch(`/financials/${fdId}/tax-proposals?need=${need}`)
+      .then(r=>r.json()).then(d=>{
+        needs=d.needs||[]; renderNeeds(); renderList(d.proposals||[]);
+        if(repayEl && !repayPrefilled){ repayEl.value = Math.round(d.loan_repay_estimate||0); repayPrefilled=true; }
+        recompute();
+      }).catch(()=>{ listEl.innerHTML='<div class="text-danger small">読み込みに失敗しました</div>'; });
+  }
+
+  [yearsEl,growthEl,repayEl].forEach(el=>{ if(el) el.addEventListener('input', project); });
+
+  // タブが開かれたら初回ロード（軽量化）
+  let loaded=false;
+  function maybeLoad(){ if(!loaded){ loaded=true; load(); } }
+  const tabBtn=document.querySelector('.cp-tab[data-tab="taxsim"]');
+  if(tabBtn) tabBtn.addEventListener('click', maybeLoad);
+  if(panel.classList.contains('active')) maybeLoad();
+})();
 </script>
 {% endblock %}

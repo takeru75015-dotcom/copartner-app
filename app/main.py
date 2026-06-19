@@ -1620,6 +1620,88 @@ async def dismiss_solution(fd_id: int, request: Request, db: Session = Depends(g
     return RedirectResponse(f"/financials/{fd_id}/analyze#panel-advice", status_code=302)
 
 
+@app.get("/financials/{fd_id}/tax-proposals")
+def tax_proposals_api(fd_id: int, request: Request, db: Session = Depends(get_db), need: str = "tax"):
+    """確定系の打ち手シミュレーターの初期データ（提案一覧＋ニーズ別並び替え）を返す。"""
+    user = get_current_user(request, db)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    from .services import proposal_engine as pe
+    # ページ本体と同じ effective_fd（月次→年換算）を使う。生のfdだと月次で桁ズレする
+    all_fds = db.query(FinancialData).join(Client).filter(
+        Client.id == fd.client_id, Client.user_id == user.id
+    ).all()
+    eff_fd, _, _, _ = _resolve_effective_fd(fd, all_fds)
+    ctx = pe.build_context(eff_fd)
+    data = pe.list_proposals(ctx)
+    data["proposals"] = pe.rank(ctx, need_key=need)
+    data["current_need"] = need
+    return data
+
+
+@app.post("/financials/{fd_id}/tax-simulate")
+async def tax_simulate_api(fd_id: int, request: Request, db: Session = Depends(get_db)):
+    """選択された打ち手の累積影響を計算して返す（税は合算後に1回だけ再計算）。"""
+    user = get_current_user(request, db)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    selections = body.get("selections") or []
+    from .services import proposal_engine as pe
+    # ページ本体と同じ effective_fd（月次→年換算）を使う。生のfdだと月次で桁ズレする
+    all_fds = db.query(FinancialData).join(Client).filter(
+        Client.id == fd.client_id, Client.user_id == user.id
+    ).all()
+    eff_fd, _, _, _ = _resolve_effective_fd(fd, all_fds)
+    ctx = pe.build_context(eff_fd)
+    return pe.simulate(ctx, selections)
+
+
+@app.post("/financials/{fd_id}/tax-project")
+async def tax_project_api(fd_id: int, request: Request, db: Session = Depends(get_db)):
+    """複数年のキャッシュ推移（概算）。body: {selections, years, growth, loan_repay}。"""
+    user = get_current_user(request, db)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    from .services import proposal_engine as pe
+    all_fds = db.query(FinancialData).join(Client).filter(
+        Client.id == fd.client_id, Client.user_id == user.id
+    ).all()
+    eff_fd, _, _, _ = _resolve_effective_fd(fd, all_fds)
+    ctx = pe.build_context(eff_fd)
+    return pe.project_years(
+        ctx, body.get("selections") or [],
+        years=body.get("years", 3), growth=body.get("growth", 0.0),
+        loan_repay=body.get("loan_repay", 0.0),
+    )
+
+
 @app.get("/financials/{fd_id}/pdf-view", response_class=HTMLResponse)
 def pdf_view(fd_id: int, request: Request, db: Session = Depends(get_db)):
     """PDF用の社長プレゼン版ビュー（Playwright経由で読み込まれる）"""
