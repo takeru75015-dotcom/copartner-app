@@ -1672,6 +1672,32 @@ async def tax_simulate_api(fd_id: int, request: Request, db: Session = Depends(g
     return pe.simulate(ctx, selections)
 
 
+@app.post("/financials/{fd_id}/tax-impact")
+async def tax_impact_api(fd_id: int, request: Request, db: Session = Depends(get_db)):
+    """1提案の単独effectを指定額で正確に計算（カードのプレビュー用）。"""
+    user = get_current_user(request, db)
+    if not user:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    fd = db.query(FinancialData).join(Client).filter(
+        FinancialData.id == fd_id, Client.user_id == user.id
+    ).first()
+    if not fd:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    from .services import proposal_engine as pe
+    all_fds = db.query(FinancialData).join(Client).filter(
+        Client.id == fd.client_id, Client.user_id == user.id
+    ).all()
+    eff_fd, _, _, _ = _resolve_effective_fd(fd, all_fds)
+    ctx = pe.build_context(eff_fd)
+    return pe.impact_at(ctx, body.get("id"), body.get("amount"))
+
+
 @app.post("/financials/{fd_id}/tax-project")
 async def tax_project_api(fd_id: int, request: Request, db: Session = Depends(get_db)):
     """複数年のキャッシュ推移（概算）。body: {selections, years, growth, loan_repay}。"""

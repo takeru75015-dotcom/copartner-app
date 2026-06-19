@@ -202,7 +202,21 @@ def list_proposals(ctx) -> dict:
     tax_now = _corp_tax(ctx["pretax"], params["t_corp"])
     out = []
     for p in data["proposals"]:
-        default = _suggest_default(p.get("default_rule"), ctx, p.get("max"))
+        # 売上/コスト系は「想定効果レンジ」を裏に持ち、その中央値を初期値にする（要検証・編集可）
+        effect_hint = None
+        if p.get("effect_low") is not None:
+            lo, hi = p["effect_low"], p["effect_high"]
+            default = max(0, _round10(ctx["revenue"] * (lo + hi) / 2))
+            effect_hint = {
+                "low_pct": round(lo * 100, 1),
+                "high_pct": round(hi * 100, 1),
+                "low_amt": round(ctx["revenue"] * lo),
+                "high_amt": round(ctx["revenue"] * hi),
+                "basis": p.get("effect_basis", "想定"),
+                "metric": "コスト" if p.get("calc_id") == "cost_cut" else "売上",
+            }
+        else:
+            default = _suggest_default(p.get("default_rule"), ctx, p.get("max"))
         imp = _impact(p, default, params, ctx)
         tax_after = _corp_tax(ctx["pretax"] + imp["pretax_delta"], params["t_corp"])
         corp_tax_saving = tax_now - tax_after
@@ -210,6 +224,7 @@ def list_proposals(ctx) -> dict:
         item["default_amount"] = default
         item["min"] = p.get("min")
         item["max"] = p.get("max")
+        item["effect_hint"] = effect_hint
         item["single_impact"] = {
             "corp_tax_saving": round(corp_tax_saving),
             "cash_effect": round(imp["cash_direct"] + corp_tax_saving),
@@ -225,6 +240,29 @@ def list_proposals(ctx) -> dict:
         "proposals": out,
         "needs": NEEDS,
         "loan_repay_estimate": estimate_loan_repay(ctx, params),
+    }
+
+
+def impact_at(ctx, pid, amount) -> dict:
+    """1提案の単独effectを、指定額で正確に計算（プレビュー用）。税は現状税額で頭打ち、min/maxクランプ。"""
+    data = _load()
+    params = data["params"]
+    by_id = {p["id"]: p for p in data["proposals"]}
+    p = by_id.get(pid)
+    if p is None:
+        return {"corp_tax_saving": 0, "cash_effect": 0, "personal_tax_saving": 0,
+                "personal_takehome": 0, "profit_effect": 0}
+    a = _clamp(_coerce_amount(amount), p.get("min"), p.get("max"))
+    imp = _impact(p, a, params, ctx)
+    tax_now = _corp_tax(ctx["pretax"], params["t_corp"])
+    tax_after = _corp_tax(ctx["pretax"] + imp["pretax_delta"], params["t_corp"])
+    corp_tax_saving = tax_now - tax_after
+    return {
+        "corp_tax_saving": round(corp_tax_saving),
+        "cash_effect": round(imp["cash_direct"] + corp_tax_saving),
+        "personal_tax_saving": round(imp["personal_tax_saving"]),
+        "personal_takehome": round(imp["personal_takehome"]),
+        "profit_effect": round(imp["pretax_delta"]),
     }
 
 

@@ -2521,6 +2521,25 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
   const man = v => Math.round(v||0).toLocaleString();
   const sign = v => (v>0?'+':'') + man(v) + '万';
 
+  // 提案ごとの効果プレビュー（入力額に連動・サーバーで正確計算）
+  function impactLine(si){
+    const parts=[];
+    if (si.profit_effect)       parts.push(`利益 ${sign(si.profit_effect)}`);
+    if (si.corp_tax_saving)     parts.push(`法人税 ${sign(si.corp_tax_saving)}`);
+    if (si.cash_effect)         parts.push(`現金 ${sign(si.cash_effect)}`);
+    if (si.personal_tax_saving) parts.push(`個人税 ${sign(si.personal_tax_saving)}`);
+    if (si.personal_takehome)   parts.push(`手取り ${sign(si.personal_takehome)}`);
+    return parts.join(' ／ ') || '—';
+  }
+  function refreshImpact(id){
+    const el=listEl.querySelector(`.prop-impact[data-imp="${id}"]`);
+    const inp=listEl.querySelector(`input[data-amt="${id}"]`);
+    if(!el || !inp) return;
+    const a=parseFloat(inp.value)||0;
+    fetch(`/financials/${fdId}/tax-impact`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id, amount:a})})
+      .then(r=>r.json()).then(si=>{ el.innerHTML=impactLine(si); }).catch(()=>{});
+  }
+
   function renderNeeds(){
     needsEl.innerHTML = needs.map(n =>
       `<button type="button" class="btn ${n.key===need?'btn-dark':'btn-outline-secondary'}" data-need="${n.key}">${n.label}</button>`
@@ -2539,13 +2558,7 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
       const mn = (p.min!=null) ? `min="${p.min}"` : '';   // null=無制限（役員報酬は減額可）
       const mx = (p.max!=null) ? `max="${p.max}"` : '';   // 共済等の上限
       const assumed = (p.certainty==='仮定');
-      const parts=[];
-      if (si.profit_effect)       parts.push(`利益 ${sign(si.profit_effect)}`);
-      if (si.corp_tax_saving)     parts.push(`法人税 ${sign(si.corp_tax_saving)}`);
-      if (si.cash_effect)         parts.push(`現金 ${sign(si.cash_effect)}`);
-      if (si.personal_tax_saving) parts.push(`個人税 ${sign(si.personal_tax_saving)}`);
-      if (si.personal_takehome)   parts.push(`手取り ${sign(si.personal_takehome)}`);
-      const impact = parts.join(' ／ ');
+      const impact = impactLine(si);
       return `
       <div class="card p-2 mb-2">
         <div class="d-flex align-items-start gap-2">
@@ -2556,11 +2569,13 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
               <span class="badge ${assumed?'bg-warning text-dark':'bg-light text-dark'}">${assumed?'仮定':p.category}・${p.target}・実行${p.effort}/5</span>
             </div>
             <div class="small text-muted">${p.description}</div>
-            <div class="d-flex align-items-center gap-2 mt-1">
+            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+              <span class="small fw-bold" style="min-width:96px">${p.input_label || '金額'}</span>
               <input type="number" class="form-control form-control-sm" style="width:110px" data-amt="${p.id}" value="${Math.round(amt||0)}" step="10" ${mn} ${mx}>
               <span class="small text-muted">万円/年</span>
             </div>
-            <div class="small mt-1" style="color:#0F0F19;">${impact || '—'}</div>
+            ${p.effect_hint ? `<div class="small mt-1" style="color:#b45309">想定効果: ${p.effect_hint.metric}${p.effect_hint.metric==='コスト'?'−':'+'}${p.effect_hint.low_pct}〜${p.effect_hint.high_pct}%（${man(p.effect_hint.low_amt)}〜${man(p.effect_hint.high_amt)}万）<span class="text-muted">※想定値・要検証・編集可</span></div>` : ''}
+            <div class="small mt-1 prop-impact" data-imp="${p.id}" style="color:#0F0F19;">${impact}</div>
             <details class="small mt-1"><summary style="cursor:pointer;color:#E60039;">詳しく（解説・計算根拠・注意）</summary>
               <div class="mt-1">${p.explanation || ''}</div>
               ${calc ? `<div class="mt-2 fw-bold">計算の根拠（前提つき）</div><ul class="mb-0">${calc}</ul>` : ''}
@@ -2574,7 +2589,7 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
       const id=c.dataset.id; state[id]=state[id]||{}; state[id].enabled=c.checked; ensureAmount(id); recompute();
     }));
     listEl.querySelectorAll('input[data-amt]').forEach(i=>i.addEventListener('input',()=>{
-      const id=i.dataset.amt; state[id]=state[id]||{}; state[id].amount=(parseFloat(i.value)||0); recompute();
+      const id=i.dataset.amt; state[id]=state[id]||{}; state[id].amount=(parseFloat(i.value)||0); refreshImpact(id); recompute();
     }));
   }
 
@@ -2603,7 +2618,18 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
       row('現預金', b.cash, a.cash, w.cash)+
       row('純資産', b.equity, a.equity, w.equity);
     const s=sim.summary||{};
-    summaryEl.innerHTML = `<div>法人税 <b>${sign(s.corp_tax_saving)}</b>（節税）／会社の現金 <b>${sign(s.cash_effect)}</b></div>`;
+    const pb=sim.personal||{};
+    // 社長個人の総取り分は personal.takehome_low/high（給与の手取り＋非課税＋共済節税を全部含む）
+    const hasP = pb.salary_gross || pb.nontax_takehome || pb.kyosai_saving;
+    let ownerHtml='';
+    if(hasP){
+      const lo=Math.round((s.cash_effect||0) + (pb.takehome_low||0));
+      const hi=Math.round((s.cash_effect||0) + (pb.takehome_high||0));
+      const persStr = (pb.takehome_low===pb.takehome_high) ? sign(pb.takehome_low) : `約${man(pb.takehome_low)}〜${man(pb.takehome_high)}万`;
+      const ownerStr = (lo===hi) ? `約${sign(lo)}` : `約${man(lo)}〜${man(hi)}万`;
+      ownerHtml = `<div>＋ 社長個人 <b>${persStr}</b> → <span style="color:#0F0F19">オーナー合算（会社＋社長）<b>${ownerStr}</b></span></div>`;
+    }
+    summaryEl.innerHTML = `<div>法人税 <b>${sign(s.corp_tax_saving)}</b>（節税）／会社の現金 <b>${sign(s.cash_effect)}</b></div>` + ownerHtml;
     renderPersonal(sim.personal);
     assumeNoteEl.style.display = showW ? '' : 'none';
   }
