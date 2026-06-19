@@ -2576,10 +2576,10 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
             </div>
             ${p.effect_hint ? `<div class="small mt-1" style="color:#b45309">想定効果: ${p.effect_hint.metric}${p.effect_hint.metric==='コスト'?'−':'+'}${p.effect_hint.low_pct}〜${p.effect_hint.high_pct}%（${man(p.effect_hint.low_amt)}〜${man(p.effect_hint.high_amt)}万）<span class="text-muted">※想定値・要検証・編集可</span></div>` : ''}
             <div class="small mt-1 prop-impact" data-imp="${p.id}" style="color:#0F0F19;">${impact}</div>
-            <details class="small mt-1"><summary style="cursor:pointer;color:#E60039;">詳しく（解説・計算根拠・注意）</summary>
+            ${cav ? `<ul class="small mb-0 mt-1" style="padding-left:1.1rem;color:#6b7280">${cav}</ul>` : ''}
+            <details class="small mt-1"><summary style="cursor:pointer;color:#E60039;">詳しく（解説・計算根拠）</summary>
               <div class="mt-1">${p.explanation || ''}</div>
               ${calc ? `<div class="mt-2 fw-bold">計算の根拠（前提つき）</div><ul class="mb-0">${calc}</ul>` : ''}
-              <div class="mt-2 fw-bold">注意</div><ul class="mb-0">${cav}</ul>
             </details>
           </div>
         </div>
@@ -2611,6 +2611,9 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
       ? `<tr><td>${label}</td><td class="text-end text-muted">${man(bv)}</td><td class="text-end fw-bold">${man(av)}</td><td class="text-end" style="color:#b45309">${man(wv)}</td></tr>`
       : `<tr><td>${label}</td><td class="text-end text-muted">${man(bv)}</td><td class="text-end">→</td><td class="text-end fw-bold">${man(av)}</td></tr>`;
     resultEl.innerHTML = hd +
+      row('売上高', b.revenue, a.revenue, w.revenue)+
+      row('粗利', b.gross, a.gross, w.gross)+
+      row('販管費', b.sga, a.sga, w.sga)+
       row('営業利益', b.operating_profit, a.operating_profit, w.operating_profit)+
       row('税引前(経常)', b.pretax, a.pretax, w.pretax)+
       row('法人税(試算)', b.corp_tax, a.corp_tax, w.corp_tax)+
@@ -2619,17 +2622,27 @@ document.getElementById('referralKitCopyBtn').addEventListener('click', function
       row('純資産', b.equity, a.equity, w.equity);
     const s=sim.summary||{};
     const pb=sim.personal||{};
-    // 社長個人の総取り分は personal.takehome_low/high（給与の手取り＋非課税＋共済節税を全部含む）
+    let html='';
+    // 確定ライン（節税系の効果）
+    if (s.corp_tax_saving || s.cash_effect) {
+      html += `<div><b>確定</b>: 法人税 <b>${sign(s.corp_tax_saving)}</b>（節税）／会社の現金 <b>${sign(s.cash_effect)}</b></div>`;
+    }
+    // 社長個人を含めたオーナー合算（給与の手取り＋非課税＋共済節税）
     const hasP = pb.salary_gross || pb.nontax_takehome || pb.kyosai_saving;
-    let ownerHtml='';
     if(hasP){
       const lo=Math.round((s.cash_effect||0) + (pb.takehome_low||0));
       const hi=Math.round((s.cash_effect||0) + (pb.takehome_high||0));
       const persStr = (pb.takehome_low===pb.takehome_high) ? sign(pb.takehome_low) : `約${man(pb.takehome_low)}〜${man(pb.takehome_high)}万`;
       const ownerStr = (lo===hi) ? `約${sign(lo)}` : `約${man(lo)}〜${man(hi)}万`;
-      ownerHtml = `<div>＋ 社長個人 <b>${persStr}</b> → <span style="color:#0F0F19">オーナー合算（会社＋社長）<b>${ownerStr}</b></span></div>`;
+      html += `<div>＋ 社長個人 <b>${persStr}</b> → オーナー合算（会社＋社長）<b>${ownerStr}</b></div>`;
     }
-    summaryEl.innerHTML = `<div>法人税 <b>${sign(s.corp_tax_saving)}</b>（節税）／会社の現金 <b>${sign(s.cash_effect)}</b></div>` + ownerHtml;
+    // 仮定込みライン（売上・コスト施策を上乗せした効果）
+    if (sim.has_assumption) {
+      const wOp = w.operating_profit - b.operating_profit, wCash = w.cash - b.cash;
+      html += `<div style="color:#b45309"><b>仮定込み</b>（売上・コスト施策）: 営業利益 <b>${sign(wOp)}</b>／会社の現金 <b>${sign(wCash)}</b></div>`;
+    }
+    if(!html) html='<div class="text-muted">打ち手を選ぶと効果が出ます</div>';
+    summaryEl.innerHTML = html;
     renderPersonal(sim.personal);
     assumeNoteEl.style.display = showW ? '' : 'none';
   }
