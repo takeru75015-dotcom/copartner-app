@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block title %}紹介可能サービス管理{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h3 class="mb-0"><i class="fas fa-store me-2"></i>紹介可能サービス管理</h3>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="/dashboard" class="btn btn-outline-secondary btn-sm">← ダッシュボード</a>
+      <a href="/admin/referral-services/new" class="btn btn-primary btn-sm" style="background:#1a237e;border-color:#1a237e;">
+        <i class="fas fa-plus me-1"></i>新規追加
+      </a>
+    </div>
+  </div>
+
+  {% if request.query_params.get('saved') %}
+  <div class="alert alert-success py-2 small mb-3"><i class="fas fa-check me-1"></i>保存しました</div>
+  {% endif %}
+  {% if request.query_params.get('deleted') %}
+  <div class="alert alert-info py-2 small mb-3"><i class="fas fa-trash me-1"></i>削除しました</div>
+  {% endif %}
+  {% if request.query_params.get('seeded') %}
+  <div class="alert alert-success py-2 small mb-3"><i class="fas fa-database me-1"></i>シードデータ {{ request.query_params.get('seeded') }}件を投入しました</div>
+  {% endif %}
+
+  {# 検索・フィルタ #}
+  <form method="get" class="card p-3 mb-3" style="background:#f7f7f9;">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="small fw-bold">検索（サービス名・提供元・説明）</label>
+        <input type="text" name="q" class="form-control form-control-sm" value="{{ q or '' }}" placeholder="支払い、freee...">
+      </div>
+      <div class="col-md-4">
+        <label class="small fw-bold">カテゴリ</label>
+        <select name="category" class="form-control form-control-sm">
+          <option value="">— すべて —</option>
+          {% for c in categories %}
+          <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-sm btn-outline-primary w-100">絞り込み</button>
+      </div>
+    </div>
+  </form>
+
+  {% if not services %}
+  <div class="card p-4 text-center">
+    <div class="text-muted mb-3">まだサービスが登録されていません</div>
+    <form method="post" action="/admin/referral-services/seed" class="d-inline">
+      <button class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-database me-1"></i>サンプルデータを投入（支払い.com・M&A仲介・会計SaaS等 5件）
+      </button>
+    </form>
+    <div class="mt-2">
+      <a href="/admin/referral-services/new" class="btn btn-primary btn-sm" style="background:#1a237e;border-color:#1a237e;">
+        <i class="fas fa-plus me-1"></i>手動で新規追加
+      </a>
+    </div>
+  </div>
+  {% else %}
+  <div class="card mb-3">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead style="background:#0F0F19;color:#fff;">
+          <tr>
+            <th style="width:40px;"></th>
+            <th>サービス名 / 提供元</th>
+            <th>カテゴリ</th>
+            <th>対象課題</th>
+            <th>料金</th>
+            <th>紹介料</th>
+            <th class="text-end">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for svc in services %}
+          <tr style="{% if not svc.is_active %}opacity:.5;{% endif %}">
+            <td class="text-center">
+              {% if svc.is_active %}
+                <span class="badge bg-success" title="有効">●</span>
+              {% else %}
+                <span class="badge bg-secondary" title="無効">○</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="fw-bold">{{ svc.name }}</div>
+              {% if svc.provider %}<div class="small text-muted">{{ svc.provider }}</div>{% endif %}
+              {% if svc.url %}<div class="small"><a href="{{ svc.url }}" target="_blank" class="text-decoration-none"><i class="fas fa-external-link-alt me-1"></i>{{ svc.url[:40] }}</a></div>{% endif %}
+            </td>
+            <td><span class="badge bg-light text-dark border">{{ svc.category }}</span></td>
+            <td class="small">
+              {% set tags = (svc.target_issue_tags | from_json) %}
+              {% for t in tags[:3] %}<span class="badge me-1" style="background:#eff6ff;color:#1e40af;">{{ t }}</span>{% endfor %}
+              {% if tags | length > 3 %}<span class="small text-muted">+{{ tags | length - 3 }}</span>{% endif %}
+            </td>
+            <td class="small">{{ svc.pricing or '—' }}</td>
+            <td class="small">
+              {% if svc.commission_type == 'percentage' %}{{ svc.commission_value }}%
+              {% elif svc.commission_type == 'fixed' %}{{ "{:,.0f}".format(svc.commission_value) }}円
+              {% elif svc.commission_type == 'monthly' %}{{ "{:,.0f}".format(svc.commission_value) }}円/月
+              {% else %}—{% endif %}
+              {% if svc.commission_note %}<div class="small text-muted">{{ svc.commission_note[:30] }}</div>{% endif %}
+            </td>
+            <td class="text-end" style="white-space:nowrap;">
+              <a href="/admin/referral-services/{{ svc.id }}/edit" class="btn btn-sm btn-outline-primary" title="編集">
+                <i class="fas fa-edit"></i>
+              </a>
+              <form method="post" action="/admin/referral-services/{{ svc.id }}/toggle" class="d-inline">
+                <button class="btn btn-sm btn-outline-secondary" title="{% if svc.is_active %}無効化{% else %}有効化{% endif %}">
+                  {% if svc.is_active %}<i class="fas fa-toggle-on"></i>{% else %}<i class="fas fa-toggle-off"></i>{% endif %}
+                </button>
+              </form>
+              <form method="post" action="/admin/referral-services/{{ svc.id }}/delete" class="d-inline"
+                    onsubmit="return confirm('「{{ svc.name }}」を削除しますか？');">
+                <button class="btn btn-sm btn-outline-danger" title="削除"><i class="fas fa-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="small text-muted text-end">合計 {{ services|length }} 件</div>
+  {% endif %}
+</div>
+{% endblock %}

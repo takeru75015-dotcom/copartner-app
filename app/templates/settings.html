@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}設定 - CoPartner{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <a href="/dashboard" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>ダッシュボードに戻る</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h4 class="fw-bold mb-2"><i class="fas fa-cog me-2"></i>提携先設定</h4>
+    <div class="text-muted small">税理士事務所ごとに、提案に含めたくないカテゴリを除外したり、自前の提携先を登録できます（のだけ先生FB対応）</div>
+  </div>
+</div>
+
+{% if request.query_params.get('ok') %}
+<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>設定を保存しました</div>
+{% endif %}
+
+<form method="post" action="/settings/save">
+  <div class="card mb-4">
+    <div class="card-header fw-bold" style="background:#fef3c7;">
+      <i class="fas fa-eye-slash me-2"></i>提案から除外したいカテゴリ
+    </div>
+    <div class="card-body">
+      <div class="small text-muted mb-3">既に独自の提携先を持っているカテゴリにチェックすると、CoPartner からの提案には表示されなくなります（自前の提携先で対応する想定）</div>
+      <div class="row g-2">
+        {% for cat in categories %}
+        <div class="col-md-4">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="excluded[]" value="{{ cat }}" id="cat_{{ loop.index }}" {% if cat in excluded %}checked{% endif %}>
+            <label class="form-check-label small" for="cat_{{ loop.index }}">{{ cat }}</label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header fw-bold" style="background:#dbeafe;">
+      <i class="fas fa-address-book me-2"></i>自前の提携先リスト
+    </div>
+    <div class="card-body">
+      <div class="small text-muted mb-2">1行 = 1社。形式: <code>カテゴリ|社名|連絡先メール|備考</code></div>
+      <div class="small text-muted mb-2">例:<br>
+        <code>法人保険|株式会社A保険|info@a-hoken.jp|社長個人とのつながりあり</code><br>
+        <code>補助金代行|B行政書士事務所|tanaka@b-gyousei.jp|採択率80%</code>
+      </div>
+      <textarea name="own_partners_raw" class="form-control font-monospace" rows="6">{% for cat, items in own_partners.items() %}{% for it in items %}{{ cat }}|{{ it.name }}|{{ it.email or '' }}|{{ it.note or '' }}
+{% endfor %}{% endfor %}</textarea>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header fw-bold d-flex justify-content-between align-items-center" style="background:#dcfce7;">
+      <span><i class="fas fa-book me-2"></i>アドバイスの参考にする書籍</span>
+      {% if is_admin %}<a href="/admin/reference-books" class="btn btn-sm btn-outline-success"><i class="fas fa-upload me-1"></i>書籍を管理（アップロード）</a>{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="small text-muted mb-3">✔ を付けた書籍の知見をベースに、アドバイスが生成されます（先生の流儀に合う本だけ選べます）。本文はそのまま転載されず、要点が再表現されます。</div>
+      {% if all_books %}
+      <div class="row g-2">
+        {% for b in all_books %}
+        <div class="col-md-6">
+          <div class="form-check border rounded p-2">
+            <input class="form-check-input" type="checkbox" name="books[]" value="{{ b.id }}" id="book_{{ b.id }}" {% if (b.id|string) in selected_books %}checked{% endif %}>
+            <label class="form-check-label small" for="book_{{ b.id }}">
+              <span class="fw-bold">{{ b.title }}</span>{% if b.author %} <span class="text-muted">／ {{ b.author }}</span>{% endif %}
+              {% if b.license_status == 'licensed' %}<span class="badge bg-success ms-1">許諾済</span>{% endif %}
+            </label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-muted small">まだ書籍が登録されていません。「書籍を管理（アップロード）」から追加してください。</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card p-3 mb-3 text-center">
+    <button type="submit" class="btn btn-primary btn-lg" style="background:#1a237e;border-color:#1a237e;">
+      <i class="fas fa-save me-1"></i>設定を保存
+    </button>
+  </div>
+</form>
+{% endblock %}

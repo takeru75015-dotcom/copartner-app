@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}提携パートナー紹介{% endblock %}
+{% block content %}
+<div class="card mb-4">
+  <div class="card-body">
+    <h4 class="fw-bold mb-2"><i class="fas fa-handshake me-2 text-primary"></i>提携先への紹介申し込み</h4>
+    <div class="text-muted small">税理士が提携先を選んで紹介できます（のだけ先生FB対応）</div>
+  </div>
+</div>
+
+{% if title_text %}
+<div class="alert alert-info">
+  <strong>パートナー区分:</strong> {{ partner_type }}<br>
+  <strong>相談内容:</strong> {{ title_text }}
+</div>
+{% endif %}
+
+{# 提携先の選択肢を提示（自前 → CoPartner定型先の順） #}
+<div class="card mb-4">
+  <div class="card-header fw-bold" style="background:#dbeafe;">
+    <i class="fas fa-address-book me-2"></i>① 自前の提携先で対応する
+  </div>
+  <div class="card-body">
+    {% if own_partner_list %}
+      <div class="small text-muted mb-2">登録済みの提携先（このカテゴリ）</div>
+      <div class="list-group">
+        {% for p in own_partner_list %}
+        <div class="list-group-item">
+          <div class="fw-bold">{{ p.name }}</div>
+          {% if p.email %}<div class="small"><i class="fas fa-envelope me-1"></i>{{ p.email }}</div>{% endif %}
+          {% if p.note %}<div class="small text-muted">{{ p.note }}</div>{% endif %}
+          {% if p.email %}
+          <a href="mailto:{{ p.email }}?subject=【紹介依頼】{{ title_text }}&body=お世話になっております。%0A顧問先（顧客ID:{{ client_id }}）の件で、{{ partner_type }} のご相談がございます。%0A詳細は別途お送りします。%0A%0A--- 税理士 {{ user.username }} ---" class="btn btn-sm btn-primary mt-2">
+            <i class="fas fa-envelope me-1"></i>このパートナーにメール送信
+          </a>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="small text-muted">このカテゴリの自前提携先は未登録です。<a href="/settings">設定画面</a>で登録できます。</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header fw-bold" style="background:#fef3c7;">
+    <i class="fas fa-list me-2"></i>② CoPartner 提携先から選ぶ（複数候補）
+  </div>
+  <div class="card-body">
+    {% if copartner_candidates %}
+      <div class="small text-muted mb-2">適合度・信頼度で選ばれた候補。比較して選択できます。</div>
+      <div class="row g-2">
+        {% for a in copartner_candidates %}
+        <div class="col-md-6">
+          <div class="card h-100 p-3" style="border-left:4px solid #0891b2;">
+            <div class="d-flex justify-content-between align-items-start mb-1">
+              <span class="badge" style="background:#0891b2;color:#fff;">{{ a.category }}</span>
+              <span class="small text-muted">適合 {{ a.match_score }}%</span>
+            </div>
+            <div class="fw-bold mt-2">{{ a.name }}</div>
+            <div class="small text-muted">{{ a.vendor }}</div>
+            <div class="small mt-2">{{ a.description }}</div>
+            <div class="mt-2">
+              <a href="{{ a.url }}" target="_blank" rel="noopener nofollow" class="btn btn-sm btn-primary">
+                <i class="fas fa-external-link-alt me-1"></i>このパートナーに申し込む
+              </a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="small text-muted">このカテゴリの CoPartner 提携先候補はありません。</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3">📌 紹介パートナーの種類</h6>
+    <ul class="small">
+      <li><strong>銀行借換・条件交渉</strong>: 提携の認定支援機関・地銀リレーション保有コンサル（複数行打診型）</li>
+      <li><strong>法人保険</strong>: 独立系保険代理店（特定保険会社専属ではないニュートラル提案）</li>
+      <li><strong>リース・割賦</strong>: 大手リース会社2-3社の見積比較</li>
+      <li><strong>資本性ローン・増資</strong>: 認定支援機関 + 公庫窓口経験者</li>
+    </ul>
+
+    <h6 class="fw-bold mb-3 mt-4">📌 CoPartner の関与</h6>
+    <ul class="small">
+      <li>事前に決算書分析を共有 → パートナー側は提案前に状況把握済み</li>
+      <li>提案フォーマットは CoPartner レビュー（社長が比較しやすい形に整形）</li>
+      <li>料金は<strong>パートナー側からの紹介手数料モデル</strong>（顧客側に追加負担なし）</li>
+    </ul>
+
+    <div class="alert alert-warning small mt-4">
+      <i class="fas fa-info-circle me-1"></i>
+      <strong>現在β版</strong>のため、お申込みは CoPartner 運営（{{ user.email }} 経由）に直接ご連絡ください。
+    </div>
+
+    <div class="mt-3">
+      <a href="mailto:takeru75015@gmail.com?subject=【パートナー紹介依頼】{{ partner_type }}&body=区分: {{ partner_type }}%0A相談内容: {{ title_text }}%0A顧客ID: {{ client_id }}%0A%0Aご記入事項：%0A・社名:%0A・連絡先:%0A・希望時期:%0A・現状の課題:" class="btn btn-primary">
+        <i class="fas fa-envelope me-1"></i>メールで申込（β版）
+      </a>
+      {% if client_id %}
+      <a href="/clients/{{ client_id }}" class="btn btn-outline-secondary ms-2">クライアント画面に戻る</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

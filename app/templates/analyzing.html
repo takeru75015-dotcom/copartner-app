@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block title %}AI分析を生成中 - {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-center" style="margin-top:8vh;">
+  <div class="card shadow-sm" style="max-width:560px;width:100%;">
+    <div class="card-body text-center p-5">
+      <div class="spinner-border text-primary mb-4" style="width:3.5rem;height:3.5rem;" role="status">
+        <span class="visually-hidden">生成中…</span>
+      </div>
+      <h4 class="fw-bold mb-2" style="color:#1a237e;">
+        <i class="fas fa-brain me-2"></i>AIが「{{ client.name }}」を分析しています
+      </h4>
+      <p id="progress-msg" class="text-muted mb-1">決算データを読み込んでいます…</p>
+      <p class="small text-muted mb-4">
+        この処理はAIが分析文を1から生成するため <strong>2〜5分ほど</strong> かかります。<br>
+        このまま画面を開いたままお待ちください（自動で結果に切り替わります）。
+      </p>
+      <div class="progress mb-3" style="height:6px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated"
+             style="width:100%;background:#1a237e;"></div>
+      </div>
+      <p class="small text-muted mb-0">
+        経過時間: <span id="elapsed">0:00</span>
+      </p>
+
+      <div id="error-box" class="alert alert-danger text-start mt-4 d-none" style="white-space:pre-line;"></div>
+      <button id="retry-btn" class="btn btn-outline-primary mt-3 d-none" onclick="location.reload()">
+        <i class="fas fa-redo me-1"></i>もう一度試す
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var fdId = {{ fd.id }};
+  var resultUrl = "/financials/" + fdId + "/analyze";
+  var runUrl = resultUrl + "?run=1";
+  var statusUrl = resultUrl + "/status";
+
+  var startedAt = Date.now();
+  var done = false;
+  var kicking = false;          // run=1 のキックが進行中か（多重キック防止）
+  var idleStreak = 0;           // 連続して idle が返った回数
+  var MAX_MS = 10 * 60 * 1000;  // 10分の保険。これを超えたらエラー表示（永久スピナー防止）
+
+  // 経過時間表示
+  setInterval(function () {
+    if (done) return;
+    var s = Math.floor((Date.now() - startedAt) / 1000);
+    var m = Math.floor(s / 60);
+    var ss = ("0" + (s % 60)).slice(-2);
+    document.getElementById("elapsed").textContent = m + ":" + ss;
+  }, 1000);
+
+  // 進捗メッセージを順に切り替え（演出。実処理とは独立）
+  var msgs = [
+    "決算データを読み込んでいます…",
+    "キャッシュ・運転資本を計算しています…",
+    "課題を抽出しています…",
+    "打ち手（ソリューション）を組み立てています…",
+    "社長向けメッセージを整えています…",
+    "もう少しで完了します…"
+  ];
+  var mi = 0;
+  setInterval(function () {
+    if (done) return;
+    mi = Math.min(mi + 1, msgs.length - 1);
+    document.getElementById("progress-msg").textContent = msgs[mi];
+  }, 25000);
+
+  function showError(msg) {
+    done = true;
+    var box = document.getElementById("error-box");
+    box.textContent = msg || "分析中にエラーが発生しました。";
+    box.classList.remove("d-none");
+    document.getElementById("retry-btn").classList.remove("d-none");
+    document.getElementById("progress-msg").textContent = "エラーが発生しました";
+  }
+
+  function goResult() {
+    done = true;
+    window.location.href = resultUrl;
+  }
+
+  // 生成をキック（run=1）。二重起動ガードがあるので連打・再読込・再キックしても多重課金しない。
+  // idle（オーナーが落ちた等）検知時に再キックして自己修復するため関数化。
+  function kick() {
+    if (done || kicking) return;
+    kicking = true;
+    fetch(runUrl, { headers: { "X-Requested-With": "fetch" } })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (data) {
+        kicking = false;
+        if (done) return;
+        if (data.status === "done") { goResult(); }
+        else if (data.status === "error") { showError(data.error); }
+        // status === "running" の場合はポーリングに任せる
+      })
+      .catch(function () {
+        // run リクエストが切断されてもポーリングで完了検知できるので握りつぶす
+        kicking = false;
+      });
+  }
+
+  // 1) 初回キック
+  kick();
+
+  // 2) 完了をポーリング（接続が切れても結果を取りこぼさないため）
+  var poll = setInterval(function () {
+    if (done) { clearInterval(poll); return; }
+    // 保険: 想定上限を超えたらエラー表示（永久スピナー防止）
+    if (Date.now() - startedAt > MAX_MS) {
+      clearInterval(poll);
+      showError("分析に時間がかかりすぎています。\nお手数ですが「もう一度試す」を押してください。");
+      return;
+    }
+    fetch(statusUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (done) return;
+        if (data.status === "done") { clearInterval(poll); goResult(); return; }
+        if (data.status === "running") { idleStreak = 0; return; }
+        if (data.status === "idle") {
+          // 誰も生成していない＝オーナーが落ちた/未開始。再キックして自己修復。
+          idleStreak++;
+          if (idleStreak >= 2) { idleStreak = 0; kick(); }
+          return;
+        }
+        if (data.status === "error") { clearInterval(poll); showError(data.error); }
+      })
+      .catch(function () { /* 一時的なエラーは無視して継続 */ });
+  }, 4000);
+})();
+</script>
+{% endblock %}

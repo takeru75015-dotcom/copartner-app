@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block title %}書籍ナレッジDB - CoPartner{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <a href="/settings" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>設定に戻る</a>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h4 class="fw-bold mb-2"><i class="fas fa-book me-2"></i>書籍ナレッジDB（管理）</h4>
+    <div class="text-muted small">税理士の良書を取り込み、アドバイスの土台にします。各税理士は設定画面で参照する本を ✔ で選びます。</div>
+  </div>
+</div>
+
+{% if request.query_params.get('ok') %}
+<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>保存しました</div>
+{% endif %}
+{% if request.query_params.get('err') == 'size' %}
+<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>ファイルサイズが大きすぎます（上限20MB）。分割するかテキスト貼り付けをご利用ください。</div>
+{% endif %}
+{% if request.query_params.get('err') == 'empty' %}
+<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>本文が取り込めませんでした（PDF抽出失敗 or 内容が空）。テキスト貼り付けで登録してください。</div>
+{% endif %}
+
+<div class="alert alert-warning small">
+  <i class="fas fa-shield-alt me-1"></i><b>著作権の注意</b>：取り込みは情報解析目的（30条の4）。出力で本文をそのまま出さず要点を再表現します。本格公開時は出版社の許諾（ライセンス）に切替えてください。
+</div>
+
+<div class="card mb-4">
+  <div class="card-header fw-bold" style="background:#dcfce7;"><i class="fas fa-upload me-2"></i>書籍を追加</div>
+  <div class="card-body">
+    <form method="post" action="/admin/reference-books/save" enctype="multipart/form-data">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">書名 <span class="text-danger">*</span></label>
+          <input type="text" name="title" class="form-control" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-bold">著者</label>
+          <input type="text" name="author" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-bold">出版社</label>
+          <input type="text" name="publisher" class="form-control">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-bold">許諾ステータス</label>
+          <select name="license_status" class="form-select">
+            <option value="none">未許諾（情報解析利用）</option>
+            <option value="licensed">許諾済（出版社ライセンス）</option>
+          </select>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label small fw-bold">ファイル（PDF / テキスト）</label>
+          <input type="file" name="file" class="form-control" accept=".pdf,.txt,.md">
+        </div>
+        <div class="col-12">
+          <label class="form-label small fw-bold">または本文・要点を貼り付け</label>
+          <textarea name="pasted_content" class="form-control" rows="5" placeholder="ファイルが無い場合、ここに本文や要点テキストを貼り付け"></textarea>
+        </div>
+      </div>
+      <div class="text-end mt-3">
+        <button type="submit" class="btn btn-success"><i class="fas fa-save me-1"></i>登録する</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header fw-bold"><i class="fas fa-list me-2"></i>登録済みの書籍（{{ books|length }}件）</div>
+  <div class="card-body p-0">
+    {% if books %}
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr><th>書名</th><th>著者</th><th>出版社</th><th>取込量</th><th>許諾</th><th>状態</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for b in books %}
+        <tr>
+          <td class="fw-bold">{{ b.title }}</td>
+          <td class="small">{{ b.author }}</td>
+          <td class="small">{{ b.publisher }}</td>
+          <td class="small text-muted">{{ (b.processed_content or '')|length }} 文字</td>
+          <td>{% if b.license_status == 'licensed' %}<span class="badge bg-success">許諾済</span>{% else %}<span class="badge bg-secondary">未許諾</span>{% endif %}</td>
+          <td>
+            <form method="post" action="/admin/reference-books/{{ b.id }}/toggle" style="display:inline;">
+              {% if b.is_active %}
+              <button type="submit" class="btn btn-sm btn-primary" title="クリックで無効化（分析に使わない）"><i class="fas fa-toggle-on me-1"></i>有効</button>
+              {% else %}
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="クリックで有効化（分析に使う）"><i class="fas fa-toggle-off me-1"></i>無効</button>
+              {% endif %}
+            </form>
+          </td>
+          <td class="text-end">
+            <form method="post" action="/admin/reference-books/{{ b.id }}/delete" onsubmit='return confirm("「" + {{ b.title|tojson }} + "」を削除しますか？");' style="display:inline;">
+              <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="p-4 text-center text-muted small">まだ書籍が登録されていません。上のフォームから追加してください。</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

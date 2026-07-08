@@ -15,9 +15,27 @@
           {% if client.note %}&nbsp;|&nbsp; {{ client.note }}{% endif %}
         </p>
         {% if client.business_details %}
-        <div class="mt-2 p-2" style="background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;">
-          <div class="small text-muted mb-1"><i class="fas fa-info-circle me-1"></i>事業構成（ヒアリング情報）</div>
-          <div style="white-space: pre-wrap; font-size: .9rem;">{{ client.business_details }}</div>
+        <details class="mt-2" style="background:#f8fafc;border-left:3px solid #3b82f6;border-radius:6px;padding:8px 12px;">
+          <summary class="small text-muted" style="cursor:pointer;font-weight:600;">
+            <i class="fas fa-info-circle me-1"></i>事業構成（ヒアリング情報）
+            <span class="text-muted fw-normal ms-1">— クリックで展開</span>
+          </summary>
+          <div class="mt-2" style="white-space: pre-wrap; font-size: .9rem;">{{ client.business_details }}</div>
+          <div class="mt-3 pt-2" style="border-top:1px dashed #cbd5e1;">
+            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#clientEdit"
+                    onclick="setTimeout(function(){var el=document.getElementById('clientEdit');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}}, 250);">
+              <i class="fas fa-pen me-1"></i>この内容を編集する
+            </button>
+            <span class="small text-muted ms-2">業種・URL・メモ・事業構成テキストをまとめて編集</span>
+          </div>
+        </details>
+        {% else %}
+        <div class="mt-2 small">
+          <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#clientEdit"
+                  onclick="setTimeout(function(){var el=document.getElementById('clientEdit');if(el){el.scrollIntoView({behavior:'smooth',block:'start'});}}, 250);">
+            <i class="fas fa-plus me-1"></i>事業構成・URL を追加
+          </button>
+          <span class="text-muted ms-2">社長へのヒアリング情報を入れると分析精度UP</span>
         </div>
         {% endif %}
       </div>
@@ -39,28 +57,169 @@
           </div>
           <div class="col-12">
             <label class="form-label small fw-semibold">
+              <i class="fas fa-globe me-1 text-primary"></i>ホームページ URL
+              <span class="text-muted fw-normal">（入力後「自動取得」ボタンで事業情報をAIが取得）</span>
+            </label>
+            <div class="d-flex gap-2">
+              <input type="url" name="website_url" id="website_url_input"
+                     class="form-control form-control-sm"
+                     value="{{ client.website_url or '' }}"
+                     placeholder="https://example.co.jp">
+            </div>
+            {% if client.web_extracted_at %}
+            <div class="small text-success mt-1">
+              <i class="fas fa-check-circle me-1"></i>最終取得: {{ client.web_extracted_at.strftime('%Y-%m-%d %H:%M') if client.web_extracted_at else '' }}
+            </div>
+            {% endif %}
+            {% if request.query_params.get('web_ok') %}
+            <div class="alert alert-success py-2 px-3 small mt-2 mb-0">
+              <i class="fas fa-check-circle me-1"></i>HPから事業情報を取得しました。事業構成欄に自動反映されています。
+            </div>
+            {% elif request.query_params.get('web_err') %}
+            <div class="alert alert-warning py-2 px-3 small mt-2 mb-0">
+              <i class="fas fa-exclamation-triangle me-1"></i>取得失敗: {{ request.query_params.get('web_err') }}
+            </div>
+            {% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold">
               事業構成の詳細
               <span class="text-muted fw-normal">（社長にヒアリングした内容。売上構成・主要取引先・業態の特徴など）</span>
             </label>
-            <textarea name="business_details" class="form-control form-control-sm" rows="4"
+            <textarea name="business_details" class="form-control form-control-sm" rows="6"
               placeholder="例:&#10;- 売上の70%が卸売（飲食店向け食材）、30%がEC直販（個人向けギフト）&#10;- 主要仕入先は3社（国産コーヒー豆）&#10;- 顧客数：法人80社、個人約2,000人">{{ client.business_details or '' }}</textarea>
           </div>
         </div>
-        <div class="mt-2">
+        <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
           <button type="submit" class="btn btn-primary btn-sm" style="background:#1a237e;border-color:#1a237e;">
             <i class="fas fa-save me-1"></i>保存
           </button>
-          <span class="small text-muted ms-2">保存後、AI分析の精度が上がります</span>
+          <span class="small text-muted">保存後、AI分析の精度が上がります</span>
         </div>
       </form>
 
-      <div class="border-top pt-3 mt-3">
-        <div class="small fw-semibold mb-2"><i class="fas fa-file-upload me-1 text-primary"></i>会社概要・事業計画・KPI進捗 などのPDFをアップロード</div>
-        <div class="small text-muted mb-2">ピッチ資料・事業計画書・カタログ など。AIが自動で事業構成テキストに追記します。</div>
-        <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
-          <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
-          <button type="submit" class="btn btn-outline-primary btn-sm flex-shrink-0">
+      <!-- 別フォーム: URL自動取得 -->
+      <form method="post" action="/clients/{{ client.id }}/extract-website" class="mt-3 border-top pt-3"
+            onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('.fetch-spinner').classList.remove('d-none');">
+        <input type="hidden" name="website_url" id="website_url_for_fetch">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <button type="submit" class="btn btn-outline-primary btn-sm" id="fetch_web_btn">
+            <i class="fas fa-globe me-1"></i>URL から事業情報を自動取得
+            <span class="spinner-border spinner-border-sm ms-2 fetch-spinner d-none" role="status"></span>
+          </button>
+          <span class="small text-muted">10-30秒かかります（HP取得＋AI抽出）</span>
+        </div>
+      </form>
+      <script>
+        // URL入力欄から hidden に同期
+        (function(){
+          var src = document.getElementById('website_url_input');
+          var dst = document.getElementById('website_url_for_fetch');
+          if(src && dst){
+            var sync = function(){ dst.value = src.value; };
+            src.addEventListener('input', sync);
+            sync();
+          }
+        })();
+      </script>
+
+    </div>
+  </div>
+</div>
+
+{# ===== 🆕 3つの独立アップロードカード（常時表示） ===== #}
+<div class="row g-3 mb-4">
+  <!-- 1. 決算書（年次） -->
+  <div class="col-lg-4">
+    <div class="card h-100" style="border-top:4px solid #1a237e;">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="fas fa-file-invoice me-1" style="color:#1a237e;"></i>① 決算書（年次）</h6>
+        <details class="mb-2">
+          <summary class="small text-muted" style="cursor:pointer;">説明を見る</summary>
+          <div class="small text-muted mt-1">
+            PDF / Excel 対応。複数年度の決算書・残高試算表など。AIが自動で売上・原価・販管費・B/S 等を抽出します。
+          </div>
+        </details>
+        <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
+          <input type="file" name="files" id="pdfFiles" class="form-control form-control-sm mb-2" accept=".pdf,.xlsx,.xlsm,.xls" multiple required>
+          <button type="submit" class="btn btn-primary btn-sm w-100" style="background:#1a237e;border-color:#1a237e;">
+            <i class="fas fa-brain me-1"></i>AI で読取
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 月次データ -->
+  <div class="col-lg-4">
+    <div class="card h-100" style="border-top:4px solid #2563eb;">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="fas fa-chart-line me-1" style="color:#2563eb;"></i>② 月次データ・比較推移表</h6>
+        <details class="mb-2">
+          <summary class="small text-muted" style="cursor:pointer;">説明を見る</summary>
+          <div class="small text-muted mt-1">
+            「比較損益推移表」「月次推移表」等のPDFをアップロードすると、<strong>12ヶ月分の月次データを一括抽出</strong>。月次グラフが自動表示されます。ファイル名に「月次・推移・比較損益」を含めると自動判定。
+          </div>
+        </details>
+        <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
+          <input type="file" name="files" class="form-control form-control-sm mb-2" accept=".pdf" multiple required>
+          <button type="submit" class="btn btn-sm w-100" style="background:#2563eb;border-color:#2563eb;color:#fff;">
+            <i class="fas fa-magic me-1"></i>月次抽出
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 元帳・補足資料 -->
+  <div class="col-lg-4">
+    <div class="card h-100" style="border-top:4px solid #d97706;">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="fas fa-book me-1" style="color:#d97706;"></i>③ 元帳・台帳・補足資料</h6>
+        <details class="mb-2">
+          <summary class="small text-muted" style="cursor:pointer;">説明を見る</summary>
+          <div class="small text-muted mt-1">
+            総勘定元帳・固定資産台帳・補助元帳・会社概要・事業計画・KPI・事業部別資料 等を AI が読み取り、社長への質問の多くを自動で埋めます。
+          </div>
+        </details>
+
+        <div class="mb-2 p-2" style="border:1px solid #fef3c7;border-radius:4px;background:#fffbeb;">
+          <div class="small fw-semibold mb-2" style="color:#854d0e;">📒 元帳・台帳（種類別アップ）</div>
+          <div class="d-flex flex-column gap-2">
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="ledger">
+              <div class="small mb-1">📒 総勘定元帳</div>
+              <div class="d-flex gap-1">
+                <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
+                <button class="btn btn-warning btn-sm flex-shrink-0" title="読取&追記"><i class="fas fa-magic"></i></button>
+              </div>
+            </form>
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="fixed_assets">
+              <div class="small mb-1">🏗 固定資産台帳</div>
+              <div class="d-flex gap-1">
+                <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
+                <button class="btn btn-warning btn-sm flex-shrink-0" title="読取&追記"><i class="fas fa-magic"></i></button>
+              </div>
+            </form>
+            <form method="post" action="/clients/{{ client.id }}/upload-ledger" enctype="multipart/form-data">
+              <input type="hidden" name="doc_type" value="aux_ledger">
+              <div class="small mb-1">📋 補助元帳(売掛/買掛/借入)</div>
+              <div class="d-flex gap-1">
+                <input type="file" name="file" class="form-control form-control-sm" accept=".pdf" required>
+                <button class="btn btn-warning btn-sm flex-shrink-0" title="読取&追記"><i class="fas fa-magic"></i></button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <form method="post" action="/clients/{{ client.id }}/upload-context" enctype="multipart/form-data"
+              onsubmit="this.querySelector('button[type=submit]').disabled=true;this.querySelector('.upload-spinner').classList.remove('d-none');">
+          <div class="small fw-semibold mb-1">📎 その他 補足資料（会社概要・事業部別資料 等）</div>
+          <input type="file" name="files" multiple class="form-control form-control-sm mb-2" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif" required>
+          <button type="submit" class="btn btn-sm w-100" style="background:#d97706;border-color:#d97706;color:#fff;">
             <i class="fas fa-magic me-1"></i>AIで読取＆追記
+            <span class="spinner-border spinner-border-sm ms-2 upload-spinner d-none" role="status"></span>
           </button>
         </form>
       </div>
@@ -78,6 +237,12 @@
 {% if msg %}
 <div class="alert alert-success">
   <i class="fas fa-check-circle me-2"></i>{{ msg }}
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-warning">
+  <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
 </div>
 {% endif %}
 
@@ -103,23 +268,27 @@
 </div>
 {% endif %}
 
-<!-- PDFアップロード（メイン） -->
-<div class="card mb-4" style="border: 2px dashed #3b82f6;">
-  <div class="card-body text-center py-4">
-    <i class="fas fa-file-upload fa-3x mb-3" style="color:#3b82f6;"></i>
-    <h5 class="fw-bold mb-1">決算書をアップロード（PDF / Excel対応）</h5>
-    <p class="text-muted small mb-3">複数年分を一度にアップ可能。PDF決算書・月次推移Excel・残高試算表 等、AIが自動で数値を読み取ります。</p>
-    <form method="post" action="/clients/{{ client.id }}/upload-pdf" enctype="multipart/form-data">
-      <div class="mb-3">
-        <input type="file" name="files" id="pdfFiles" class="form-control" accept=".pdf,.xlsx,.xlsm,.xls" multiple required>
-        <div class="form-text">複数選択OK（Ctrl/Cmdを押しながらクリック）</div>
-      </div>
-      <button type="submit" class="btn btn-primary btn-lg px-5" style="background:#1a237e;border-color:#1a237e;">
-        <i class="fas fa-brain me-2"></i>AIで読み取って分析
-      </button>
-    </form>
+{# 🌟 最新期で分析する 大型ボタン #}
+{% if latest_annual %}
+<div class="card mb-4" style="border:2px solid #1a237e;background:linear-gradient(135deg,#eef2ff,#f5f3ff);">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <h6 class="fw-bold mb-1" style="color:#1a237e;"><i class="fas fa-rocket me-2"></i>最新期で分析</h6>
+      <div class="small text-muted">対象: <strong>{{ latest_annual.period }}</strong> / 売上 {{ "{:,.0f}".format(latest_annual.revenue or 0) }}万円。月次データがあれば年度集計＋月次グラフも自動表示。</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="/financials/{{ latest_annual.id }}/analyze" class="btn btn-primary btn-lg px-4" style="background:#1a237e;border-color:#1a237e;">
+        <i class="fas fa-chart-bar me-2"></i>AI分析を実行
+      </a>
+      {% if financials|length >= 2 %}
+      <a href="/clients/{{ client.id }}/compare?ids={% for fd in financials %}{{ fd.id }}{% if not loop.last %},{% endif %}{% endfor %}" class="btn btn-outline-primary btn-lg">
+        <i class="fas fa-chart-line me-1"></i>全期間を比較
+      </a>
+      {% endif %}
+    </div>
   </div>
 </div>
+{% endif %}
 
 <!-- 手入力（折りたたみ） -->
 <div class="accordion mb-4" id="manualInputAccordion">
@@ -183,9 +352,16 @@
 
 <!-- 過去データ一覧 -->
 {% if financials %}
+{% set annual_fds = financials | rejectattr('period_type','equalto','monthly') | list %}
+{% set monthly_fds = financials | selectattr('period_type','equalto','monthly') | list %}
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#f1f5ff;">
-    <span class="fw-bold"><i class="fas fa-history me-2" style="color:#1a237e;"></i>登録済みの期データ（{{ financials|length }}件）</span>
+    <span class="fw-bold">
+      <i class="fas fa-history me-2" style="color:#1a237e;"></i>登録済みの期データ
+      <span class="small fw-normal text-muted">
+        年次 {{ annual_fds|length }}件{% if monthly_fds %} / 月次 {{ monthly_fds|length }}件{% endif %}
+      </span>
+    </span>
     <div class="d-flex gap-2 flex-wrap">
       <form method="post" action="/clients/{{ client.id }}/recalc-from-breakdown" class="d-inline" onsubmit="return confirm('内訳データから在庫・売掛・現金・有利子負債を再計算します。よろしいですか？');">
         <button type="submit" class="btn btn-sm btn-outline-info">
@@ -209,36 +385,144 @@
       {% endif %}
     </div>
   </div>
+
+  {# 🆕 一括選択ツールバー #}
+  <div class="px-3 py-2 d-flex gap-2 align-items-center flex-wrap" style="background:#fffbeb;border-bottom:1px solid #fef3c7;">
+    <span class="small fw-bold" style="color:#92400e;"><i class="fas fa-check-square me-1"></i>一括操作:</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('all')">全選択</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('monthly')">月次のみ選択</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('annual')">年次のみ選択</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkSelect('none')">選択解除</button>
+    <span class="small text-muted ms-2" id="bulk_count">0件選択</span>
+    <form method="post" action="/clients/{{ client.id }}/bulk-delete-financials" id="bulk_delete_form"
+          class="ms-auto d-inline"
+          onsubmit="var n = document.querySelectorAll('.fd-checkbox:checked').length; if(n===0){alert('1件以上選択してください');return false;} return confirm(n + '件のデータを削除します。元に戻せません。よろしいですか？');">
+      <input type="hidden" name="fd_ids" id="bulk_fd_ids" value="">
+      <button type="submit" class="btn btn-sm btn-danger" id="bulk_delete_btn" disabled>
+        <i class="fas fa-trash me-1"></i>選択した期を一括削除
+      </button>
+    </form>
+  </div>
+
   <div class="list-group list-group-flush">
-    {% for fd in financials %}
+    {# 年次データのみメイン表示 #}
+    {% for fd in annual_fds %}
     {% set is_thin = (not fd.revenue) or (not fd.cost_of_sales and not fd.selling_expenses) %}
+    {% set ptype = fd.period_type or '' %}
     <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 {% if is_thin %}bg-light{% endif %}">
-      <div>
-        <span class="fw-semibold">{{ fd.period }}</span>
-        {% if is_thin %}<span class="badge bg-warning text-dark ms-2 small">⚠️ データ不足</span>{% endif %}
-        <div class="text-muted small mt-1">
-          売上: {{ "{:,.0f}".format(fd.revenue or 0) }}万 /
-          原価: {{ "{:,.0f}".format(fd.cost_of_sales or 0) }}万 /
-          販管費: {{ "{:,.0f}".format(fd.selling_expenses or 0) }}万 /
-          営業利益: {{ "{:,.0f}".format(fd.operating_profit or 0) }}万
+      <div class="d-flex align-items-center gap-2 flex-grow-1">
+        <input type="checkbox" class="form-check-input fd-checkbox m-0" value="{{ fd.id }}"
+               data-period-type="{{ ptype }}" onchange="updateBulkCount()" style="cursor:pointer;">
+        <div>
+          <span class="fw-semibold">{{ fd.period }}</span>
+          <span class="badge bg-secondary ms-1 small">年次</span>
+          {% if is_thin %}<span class="badge bg-warning text-dark ms-1 small">⚠️ データ不足</span>{% endif %}
+          <div class="text-muted small mt-1">
+            売上: {{ "{:,.0f}".format(fd.revenue or 0) }}万 /
+            原価: {{ "{:,.0f}".format(fd.cost_of_sales or 0) }}万 /
+            販管費: {{ "{:,.0f}".format(fd.selling_expenses or 0) }}万 /
+            営業利益: {{ "{:,.0f}".format(fd.operating_profit or 0) }}万
+          </div>
         </div>
       </div>
-      <div class="d-flex gap-2">
-        <a href="/financials/{{ fd.id }}/analyze" class="btn btn-outline-primary btn-sm">
-          <i class="fas fa-chart-bar me-1"></i>単年分析
+      <div class="d-flex gap-2 align-items-center">
+        {% if ptype != 'monthly' %}
+        <a href="/financials/{{ fd.id }}/analyze" class="btn btn-primary btn-sm" style="background:#1a237e;border-color:#1a237e;">
+          <i class="fas fa-chart-bar me-1"></i>この期で分析
         </a>
-        <form method="post" action="/financials/{{ fd.id }}/delete" class="d-inline" onsubmit="return confirm('この期のデータを削除しますか？');">
-          <button type="submit" class="btn btn-outline-danger btn-sm" title="この期のデータを削除"><i class="fas fa-trash"></i></button>
-        </form>
+        {% endif %}
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="その他の操作">
+            <i class="fas fa-ellipsis-v"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            {% if ptype == 'monthly' %}
+            <li>
+              <a href="/financials/{{ fd.id }}/analyze" class="dropdown-item">
+                <i class="fas fa-chart-bar me-2"></i>この月だけで分析
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            {% endif %}
+            <li>
+              <form method="post" action="/financials/{{ fd.id }}/delete" class="m-0"
+                    onsubmit='return confirm("「" + {{ fd.period|tojson }} + "」のデータを削除します。元に戻せません。よろしいですか？");'>
+                <button type="submit" class="dropdown-item text-danger">
+                  <i class="fas fa-trash me-2"></i>この期のデータを削除
+                </button>
+              </form>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
     {% endfor %}
   </div>
+
+  {# 月次データ（折りたたみで隠す） #}
+  {% if monthly_fds %}
+  <details style="border-top:2px solid #fef3c7;background:#fffbeb;">
+    <summary class="px-3 py-2 small fw-bold" style="color:#854d0e;cursor:pointer;">
+      <i class="fas fa-calendar-alt me-1"></i>月次データ {{ monthly_fds|length }}件（クリックで展開）
+      <span class="fw-normal text-muted ms-1">— 月次推移グラフで使用中。一覧表示は省略してます</span>
+    </summary>
+    <div class="list-group list-group-flush" style="max-height:400px;overflow-y:auto;">
+      {% for fd in monthly_fds %}
+      {% set is_thin = (not fd.revenue) or (not fd.cost_of_sales and not fd.selling_expenses) %}
+      <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+        <div class="d-flex align-items-center gap-2 flex-grow-1">
+          <input type="checkbox" class="form-check-input fd-checkbox m-0" value="{{ fd.id }}"
+                 data-period-type="monthly" onchange="updateBulkCount()" style="cursor:pointer;">
+          <div>
+            <span class="fw-semibold small">{{ fd.period }}</span>
+            <span class="badge bg-info text-white ms-1" style="font-size:.65rem;">月次</span>
+            <div class="text-muted" style="font-size:.75rem;">
+              売上 {{ "{:,.0f}".format(fd.revenue or 0) }} / 営利 {{ "{:,.0f}".format(fd.operating_profit or 0) }}
+            </div>
+          </div>
+        </div>
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <form method="post" action="/financials/{{ fd.id }}/delete" class="m-0"
+                    onsubmit='return confirm("「" + {{ fd.period|tojson }} + "」のデータを削除します。よろしいですか？");'>
+                <button type="submit" class="dropdown-item text-danger small"><i class="fas fa-trash me-1"></i>削除</button>
+              </form>
+            </li>
+          </ul>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 </div>
 {% endif %}
 
 {% block scripts %}
 <script>
+// === 一括選択ロジック ===
+function bulkSelect(mode) {
+  const checkboxes = document.querySelectorAll('.fd-checkbox');
+  checkboxes.forEach(cb => {
+    const pt = cb.dataset.periodType || '';
+    if (mode === 'all') cb.checked = true;
+    else if (mode === 'none') cb.checked = false;
+    else if (mode === 'monthly') cb.checked = (pt === 'monthly');
+    else if (mode === 'annual') cb.checked = (pt === 'annual' || pt === '');
+  });
+  updateBulkCount();
+}
+
+function updateBulkCount() {
+  const checked = document.querySelectorAll('.fd-checkbox:checked');
+  const ids = Array.from(checked).map(cb => cb.value);
+  document.getElementById('bulk_count').textContent = `${ids.length}件選択`;
+  document.getElementById('bulk_fd_ids').value = ids.join(',');
+  document.getElementById('bulk_delete_btn').disabled = (ids.length === 0);
+}
+
 // ファイル選択時にファイル名を表示
 document.getElementById('pdfFiles').addEventListener('change', function() {
   const files = this.files;

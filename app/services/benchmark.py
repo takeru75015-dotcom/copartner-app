@@ -108,6 +108,37 @@ def _get_default(industries: List[Dict]) -> Dict:
     return industries[0] if industries else {}
 
 
+def classify_scale_tier(revenue: float) -> Dict:
+    """売上高で規模帯を判定。
+    小：< 1億円 / 中：1-10億円 / 大：10億円超
+    返り値の adjustments は中央値・上位25% を規模補正するための係数。
+    """
+    if revenue < 10000:  # 万円単位なので 1億円 = 10000万円
+        return {
+            "tier": "小規模",
+            "tier_label": "小規模（年商1億円未満）",
+            "tier_range": "年商 〜1億円",
+            "margin_mult": 0.7,    # 小規模は利益率低めの傾向
+            "equity_add": -5.0,    # 自己資本比率は低い
+        }
+    elif revenue < 100000:  # 10億円
+        return {
+            "tier": "中規模",
+            "tier_label": "中規模（年商1〜10億円）",
+            "tier_range": "年商 1〜10億円",
+            "margin_mult": 1.0,
+            "equity_add": 0.0,
+        }
+    else:
+        return {
+            "tier": "大規模",
+            "tier_label": "大規模（年商10億円超）",
+            "tier_range": "年商 10億円〜",
+            "margin_mult": 1.3,    # 大規模は規模の経済で利益率高め
+            "equity_add": 5.0,
+        }
+
+
 def compare_to_benchmark(fd, industry_text: str) -> Dict:
     """
     財務データと業界ベンチマークを比較して判定結果を返す。
@@ -136,6 +167,11 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
     if not ind:
         return {"industry_name": "不明", "comparisons": [], "overall_position": "unknown"}
 
+    # 規模帯判定（北村先生FB対応：規模別の参考中央値も併記）
+    scale = classify_scale_tier(getattr(fd, "revenue", 0) or 0)
+    m_mult = scale["margin_mult"]
+    eq_add = scale["equity_add"]
+
     # 自社の指標計算
     gross_margin = (fd.gross_profit / fd.revenue * 100) if fd.revenue else 0
     operating_margin = (fd.operating_profit / fd.revenue * 100) if fd.revenue else 0
@@ -143,38 +179,74 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
     comparisons = []
 
     # 粗利率
-    comparisons.append(_build_comparison(
+    gm_comp = _build_comparison(
         metric="粗利率（売上から仕入れを引いた利益の割合）",
         self_value=gross_margin,
         median=ind["gross_margin_median"],
         top25=ind["gross_margin_top25"],
         unit="%",
         higher_is_better=True,
-    ))
+    )
+    gm_comp["scale_adjusted_median"] = round(ind["gross_margin_median"] * m_mult, 1)
+    gm_comp["scale_tier"] = scale["tier_label"]
+    comparisons.append(gm_comp)
 
-    # 営業利益率
-    comparisons.append(_build_comparison(
-        metric="営業利益率（本業の儲けの割合）",
-        self_value=operating_margin,
-        median=ind["operating_margin_median"],
-        top25=ind["operating_margin_top25"],
-        unit="%",
-        higher_is_better=True,
-    ))
+    # 営業利益率（黒字/赤字分離で比較）
+    is_profitable = operating_margin > 0
+    profit_med = ind.get("operating_margin_profit_median") or ind["operating_margin_median"]
+    loss_med = ind.get("operating_margin_loss_median") or 0.0
+    if is_profitable:
+        # 黒字企業 → 黒字企業のみの中央値と比較（赤字社混入の平均は使わない）
+        op_comp = _build_comparison(
+            metric="営業利益率（黒字企業のみの中央値と比較）",
+            self_value=operating_margin,
+            median=profit_med,
+            top25=ind["operating_margin_top25"],
+            unit="%",
+            higher_is_better=True,
+        )
+        op_comp["benchmark_note"] = (
+            f"黒字企業のみの業界中央値 {profit_med}%（赤字企業の中央値は {loss_med}%）。"
+            "全体平均は赤字社で押し下げられるため、黒字社は黒字社内で比較が妥当。"
+        )
+        op_comp["scale_adjusted_median"] = round(profit_med * m_mult, 1)
+        op_comp["scale_tier"] = scale["tier_label"]
+        comparisons.append(op_comp)
+    else:
+        # 赤字企業 → 赤字企業の中央値と比較（赤字社の中でどの位置か）
+        op_comp = _build_comparison(
+            metric="営業利益率（赤字企業群の中での位置）",
+            self_value=operating_margin,
+            median=loss_med,
+            top25=0.0,  # 赤字脱却ライン
+            unit="%",
+            higher_is_better=True,
+        )
+        op_comp["benchmark_note"] = (
+            f"赤字企業の業界中央値 {loss_med}%。"
+            f"黒字脱却の目安は 0% 超え、業界平均並みは {profit_med}%。"
+            "赤字社内での位置づけと、脱却ラインを意識した二段階目標設定が有効。"
+        )
+        op_comp["scale_adjusted_median"] = round(loss_med * m_mult, 1)
+        op_comp["scale_tier"] = scale["tier_label"]
+        comparisons.append(op_comp)
 
     # 自己資本比率（B/Sデータがあれば）
     total_assets = getattr(fd, "total_assets", 0) or 0
     equity = getattr(fd, "equity", 0) or 0
     if total_assets > 0 and equity > 0:
         equity_ratio = equity / total_assets * 100
-        comparisons.append(_build_comparison(
+        eq_comp = _build_comparison(
             metric="自己資本比率（借入に頼らない自力経営の度合い）",
             self_value=equity_ratio,
             median=ind["equity_ratio_median"],
             top25=ind["equity_ratio_top25"],
             unit="%",
             higher_is_better=True,
-        ))
+        )
+        eq_comp["scale_adjusted_median"] = round(ind["equity_ratio_median"] + eq_add, 1)
+        eq_comp["scale_tier"] = scale["tier_label"]
+        comparisons.append(eq_comp)
 
     # 売上債権回転期間（業界ベンチマークなしの独立判定）
     receivables = getattr(fd, "receivables", 0) or 0
@@ -183,6 +255,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         # 一般目安: 30日以下=良、45日=普通、60日超=要改善、90日超=危険
         comparisons.append({
             "metric": "売上債権回転期間（売掛金が現金になるまでの日数）",
+            "metric_owner_label": "売掛金が現金になるまでの日数",
             "self_value": round(rec_days, 1),
             "median": 45.0,
             "top25": 30.0,
@@ -209,6 +282,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         inv_days = inventory / cost_of_sales * 365
         comparisons.append({
             "metric": "在庫回転期間（仕入れから売れるまでの日数）",
+            "metric_owner_label": "在庫が売れるまでの日数",
             "self_value": round(inv_days, 1),
             "median": 45.0,
             "top25": 30.0,
@@ -235,6 +309,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         debt_equity = total_liabilities / equity * 100
         comparisons.append({
             "metric": "負債比率（借金が自己資金の何倍か）",
+            "metric_owner_label": "借金が自分のお金の何倍か",
             "self_value": round(debt_equity, 1),
             "median": 100.0,
             "top25": 50.0,
@@ -287,6 +362,7 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
 
         comparisons.append({
             "metric": "流動比率（短期支払い余力）",
+            "metric_owner_label": "短期の支払い余力",
             "self_value": round(current_ratio, 1),
             "median": 150.0,
             "top25": 200.0,
@@ -314,6 +390,9 @@ def compare_to_benchmark(fd, industry_text: str) -> Dict:
         "source_note": ind["source_note"],
         "comparisons": comparisons,
         "overall_position": overall,
+        "scale_tier": scale["tier"],
+        "scale_tier_label": scale["tier_label"],
+        "scale_tier_range": scale["tier_range"],
     }
 
 
@@ -349,6 +428,7 @@ def _build_comparison(metric: str, self_value: float, median: float, top25: floa
 
     return {
         "metric": metric,
+        "metric_owner_label": to_owner_label(metric),
         "self_value": round(self_value, 1),
         "median": median,
         "top25": top25,
@@ -357,6 +437,92 @@ def _build_comparison(metric: str, self_value: float, median: float, top25: floa
         "gap_to_median": round(gap, 1),
         "comment": comment,
     }
+
+
+
+# 社長向け言い換え辞書（北村先生FB対応・専門用語→日常語）
+METRIC_OWNER_LABELS = {
+    "粗利率": "仕入れを引いた利益率",
+    "営業利益率": "本業のもうけの割合",
+    "自己資本比率": "自分のお金で経営してる割合",
+    "流動比率": "短期の支払い余力",
+    "負債比率": "借金が自分のお金の何倍か",
+    "売上債権回転期間": "売掛金が現金になるまでの日数",
+    "在庫回転期間": "在庫が売れるまでの日数",
+    "EBITDA": "本業の現金生成力",
+    "運転資本": "日々の運営に必要なお金",
+    "CCC": "現金が戻ってくるサイクル",
+}
+
+
+def to_owner_label(metric: str) -> str:
+    """専門用語を社長向け易しい言葉に変換。括弧書きは外す。"""
+    base = metric.split("（")[0].strip()
+    return METRIC_OWNER_LABELS.get(base, base)
+
+
+def extract_competitive_strengths(benchmark: Dict, fd=None) -> List[Dict]:
+    """
+    業界ベンチマークから「他社と比較した強み」を抽出して言語化する。
+    rank が "top25" または "above_median" の項目を強みとして整理。
+
+    Returns:
+        [
+          {
+            "title": "粗利率が業界上位25%",
+            "metric": "粗利率",
+            "self_value": "42.5%",
+            "industry_median": "32.5%",
+            "industry_top25": "42.0%",
+            "gap": "+10.0pt",
+            "rank": "top25",
+            "narrative": "業界の上位25%水準。同業他社と比べて...",
+          }
+        ]
+    """
+    out = []
+    rank_order = {"top25": 0, "above_median": 1}
+    comparisons = [c for c in benchmark.get("comparisons", [])
+                   if c.get("rank") in rank_order]
+    comparisons.sort(key=lambda c: rank_order.get(c["rank"], 9))
+
+    for c in comparisons:
+        metric = c["metric"].split("（")[0]
+        rank = c["rank"]
+        gap = c.get("gap_to_median", 0)
+        self_val = c.get("self_value")
+        median = c.get("median")
+        top25 = c.get("top25")
+        unit = c.get("unit", "")
+
+        owner_metric = to_owner_label(metric)
+
+        if rank == "top25":
+            narrative = (
+                f"{owner_metric}は業界上位25%水準。"
+                f"同業の半分以上はあなたの数字に届いていません。"
+                f"「{owner_metric} {self_val}{unit}」は社長との会話で誇れる材料。"
+            )
+        else:  # above_median
+            narrative = (
+                f"{owner_metric}は業界中央値を上回る。"
+                f"同業の半分より良い数字。"
+                f"上位25%（{top25}{unit}）まではあと {top25 - self_val:+.1f}{unit}。"
+            )
+
+        out.append({
+            "title": f"{owner_metric}が業界{'上位25%' if rank == 'top25' else '中央値超'}",
+            "metric": metric,
+            "owner_metric": owner_metric,
+            "self_value": f"{self_val}{unit}",
+            "industry_median": f"{median}{unit}",
+            "industry_top25": f"{top25}{unit}",
+            "gap": f"{gap:+.1f}{unit}",
+            "rank": rank,
+            "narrative": narrative,
+        })
+
+    return out
 
 
 def format_benchmark_text(benchmark: Dict) -> str:
@@ -380,5 +546,7 @@ def format_benchmark_text(benchmark: Dict) -> str:
             f"(業界中央値 {c['median']}{c['unit']}, 上位25% {c['top25']}{c['unit']}) "
             f"→ {rank_label}"
         )
+        if c.get("benchmark_note"):
+            lines.append(f"    補足: {c['benchmark_note']}")
     lines.append(f"  出典: {benchmark['source_note']}")
     return "\n".join(lines)

@@ -11,11 +11,18 @@ venv/
 *.db
 *.sqlite
 *.sqlite3
+# 匿名化済みデモ用シードだけは公開OK（実データは上の *.db で除外されたまま）
+!kpi_saas.seed.db
 
 # Secrets
 .env
 .env.*
 !.env.example
+dev access*.txt
+dev_access*.txt
+*token*.txt
+*secret*.txt
+*credential*.txt
 
 # OS
 .DS_Store
@@ -44,3 +51,19 @@ package-lock.json
 dist/
 build/
 *.egg
+
+# 内部資料（公開リポジトリに絶対上げない：税理士実名・戦略・ピッチ・競合）
+agents/
+competitors/
+hearings/
+pitch/
+screenshots/
+test-results/
+business_decisions.md
+company_rules.md
+summary_*.md
+現状説明資料_*.md
+CoPartner_pitch_complete.md
+CoPartner_summary.md
+make_pptx.js
+*.bat

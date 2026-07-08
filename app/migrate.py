@@ -18,6 +18,34 @@ def migrate():
 
     # clients.business_details
     _add_column(cursor, "clients", "business_details", "TEXT DEFAULT ''")
+    _add_column(cursor, "clients", "hearing_answers", "TEXT DEFAULT '{}'")
+    # clients.website_url + web_extracted_json + web_extracted_at（HP自動取得機能）
+    _add_column(cursor, "clients", "website_url", "TEXT DEFAULT ''")
+    _add_column(cursor, "clients", "web_extracted_json", "TEXT DEFAULT ''")
+    _add_column(cursor, "clients", "web_extracted_at", "DATETIME")
+    # analyses.dismissed_solutions
+    _add_column(cursor, "analyses", "dismissed_solutions", "TEXT DEFAULT '[]'")
+
+    # users.referral_code（アフィ紹介ID）
+    _add_column(cursor, "users", "referral_code", "TEXT DEFAULT ''")
+    # users.excluded_categories（除外したいアフィカテゴリ）/ own_partners（自前提携先）
+    _add_column(cursor, "users", "excluded_categories", "TEXT DEFAULT '[]'")
+    _add_column(cursor, "users", "own_partners", "TEXT DEFAULT '{}'")
+    # users.selected_books（参照する書籍IDのJSON配列）
+    _add_column(cursor, "users", "selected_books", "TEXT DEFAULT '[]'")
+    # users.is_admin（運営管理者フラグ。列追加のみ。自動付与はしない＝誤昇格/乗っ取り防止）
+    # 付与は運営が明示的に: python -m app.grant_admin <username>
+    _add_column(cursor, "users", "is_admin", "INTEGER DEFAULT 0")
+    # 既存ユーザーに referral_code を発番（空の場合）
+    try:
+        import secrets
+        cursor.execute("SELECT id FROM users WHERE referral_code IS NULL OR referral_code = ''")
+        for (uid,) in cursor.fetchall():
+            code = "tax_" + secrets.token_hex(4)  # tax_ + 8桁hex
+            cursor.execute("UPDATE users SET referral_code = ? WHERE id = ?", (code, uid))
+            print(f"  + assigned referral_code {code} to user {uid}")
+    except sqlite3.OperationalError as e:
+        print(f"  ! referral_code backfill skip: {e}")
 
     # financial_data に B/S 等を追加
     for col, col_def in [
@@ -33,8 +61,101 @@ def migrate():
         ("equity", "REAL DEFAULT 0"),
         ("employees", "INTEGER DEFAULT 0"),
         ("breakdown_json", "TEXT DEFAULT '{}'"),
+        ("period_type", "TEXT DEFAULT ''"),   # 'annual'/'monthly'
+        ("fiscal_year", "TEXT DEFAULT ''"),   # 月次データの所属年度
     ]:
         _add_column(cursor, "financial_data", col, col_def)
+
+    # 既存 financial_data の period を西暦に正規化 + period_type / fiscal_year 遡及判定
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from app.services.period_classifier import classify_period, normalize_to_seireki
+
+        cursor.execute("SELECT id, period, period_type, fiscal_year FROM financial_data")
+        rows = cursor.fetchall()
+        normalized = 0
+        reclassified = 0
+        for rid, period, pt, fy in rows:
+            # 西暦正規化
+            new_period = normalize_to_seireki(period or "")
+            need_update = False
+            if new_period != period:
+                period = new_period
+                need_update = True
+                normalized += 1
+            # period_type / fiscal_year を再判定
+            if not pt or pt == "":
+                ptype, fyl = classify_period(period or "")
+                if ptype:
+                    cursor.execute(
+                        "UPDATE financial_data SET period = ?, period_type = ?, fiscal_year = ? WHERE id = ?",
+                        (period, ptype, normalize_to_seireki(fyl), rid)
+                    )
+                    reclassified += 1
+                    need_update = False  # 上の UPDATE で更新済
+            if need_update:
+                cursor.execute(
+                    "UPDATE financial_data SET period = ?, fiscal_year = ? WHERE id = ?",
+                    (period, normalize_to_seireki(fy or ""), rid)
+                )
+        if normalized > 0:
+            print(f"  + normalized {normalized} period strings to 西暦")
+        if reclassified > 0:
+            print(f"  + reclassified {reclassified} financial_data rows (period_type/fiscal_year)")
+    except Exception as e:
+        print(f"  ! period normalize/reclassify skip: {e}")
+
+    # referral_services テーブル新規作成
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS referral_services (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            provider TEXT DEFAULT '',
+            category TEXT DEFAULT '',
+            target_issue_tags TEXT DEFAULT '[]',
+            target_industries TEXT DEFAULT '["全業種"]',
+            target_size TEXT DEFAULT '{}',
+            description_short TEXT DEFAULT '',
+            description_long TEXT DEFAULT '',
+            service_features TEXT DEFAULT '[]',
+            pricing TEXT DEFAULT '',
+            url TEXT DEFAULT '',
+            referral_url_template TEXT DEFAULT '',
+            commission_type TEXT DEFAULT '',
+            commission_value REAL DEFAULT 0,
+            commission_note TEXT DEFAULT '',
+            logo_url TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            is_active INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 100,
+            created_by_user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_referral_services_category ON referral_services(category)")
+    print("  = referral_services table ready")
+
+    # reference_books テーブル新規作成（書籍ナレッジDB）
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reference_books (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            author TEXT DEFAULT '',
+            publisher TEXT DEFAULT '',
+            processed_content TEXT DEFAULT '',
+            full_read TEXT DEFAULT '',
+            tags TEXT DEFAULT '[]',
+            license_status TEXT DEFAULT 'none',
+            is_active INTEGER DEFAULT 1,
+            uploaded_by_user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # 既存DBには full_read 列を後付け（全ページ読破版の器。RAG用）
+    _add_column(cursor, "reference_books", "full_read", "TEXT DEFAULT ''")
+    print("  = reference_books table ready")
 
     conn.commit()
     conn.close()

@@ -1,11 +1,16 @@
 {% extends 'base.html' %}
 {% block title %}ダッシュボード{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <h4 class="fw-bold mb-0"><i class="fas fa-users me-2" style="color:#1a237e;"></i>クライアント一覧</h4>
-  <button class="btn btn-primary" style="background:#1a237e;border-color:#1a237e;" data-bs-toggle="modal" data-bs-target="#addClientModal">
-    <i class="fas fa-plus me-1"></i> クライアント追加
-  </button>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/admin/referral-services" class="btn btn-outline-primary btn-sm">
+      <i class="fas fa-store me-1"></i>紹介可能サービス管理
+    </a>
+    <button class="btn btn-primary" style="background:#1a237e;border-color:#1a237e;" data-bs-toggle="modal" data-bs-target="#addClientModal">
+      <i class="fas fa-plus me-1"></i> クライアント追加
+    </button>
+  </div>
 </div>
 
 {% if clients %}
