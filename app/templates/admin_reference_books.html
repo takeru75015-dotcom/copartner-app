@@ -82,7 +82,15 @@
           <td class="small">{{ b.publisher }}</td>
           <td class="small text-muted">{{ (b.processed_content or '')|length }} 文字</td>
           <td>{% if b.license_status == 'licensed' %}<span class="badge bg-success">許諾済</span>{% else %}<span class="badge bg-secondary">未許諾</span>{% endif %}</td>
-          <td>{% if b.is_active %}<span class="badge bg-primary">有効</span>{% else %}<span class="badge bg-light text-dark">無効</span>{% endif %}</td>
+          <td>
+            <form method="post" action="/admin/reference-books/{{ b.id }}/toggle" style="display:inline;">
+              {% if b.is_active %}
+              <button type="submit" class="btn btn-sm btn-primary" title="クリックで無効化（分析に使わない）"><i class="fas fa-toggle-on me-1"></i>有効</button>
+              {% else %}
+              <button type="submit" class="btn btn-sm btn-outline-secondary" title="クリックで有効化（分析に使う）"><i class="fas fa-toggle-off me-1"></i>無効</button>
+              {% endif %}
+            </form>
+          </td>
           <td class="text-end">
             <form method="post" action="/admin/reference-books/{{ b.id }}/delete" onsubmit='return confirm("「" + {{ b.title|tojson }} + "」を削除しますか？");' style="display:inline;">
               <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>

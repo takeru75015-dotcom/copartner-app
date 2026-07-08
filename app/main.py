@@ -2508,6 +2508,21 @@ def reference_books_delete(book_id: int, request: Request, db: Session = Depends
     return RedirectResponse("/admin/reference-books?ok=1", status_code=302)
 
 
+@app.post("/admin/reference-books/{book_id}/toggle")
+def reference_books_toggle(book_id: int, request: Request, db: Session = Depends(get_db)):
+    """書籍ナレッジの有効/無効を切り替える（admin）。無効化したものは分析プロンプトに注入されない。"""
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    if not _is_admin(user):
+        return RedirectResponse("/settings", status_code=302)
+    book = db.query(ReferenceBook).filter(ReferenceBook.id == book_id).first()
+    if book:
+        book.is_active = 0 if book.is_active else 1
+        db.commit()
+    return RedirectResponse("/admin/reference-books?ok=1", status_code=302)
+
+
 def _parse_json_list(s: str) -> str:
     """フォーム入力の改行/カンマ区切り → JSON配列文字列"""
     if not s:

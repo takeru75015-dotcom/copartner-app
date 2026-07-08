@@ -40,7 +40,9 @@ pip install -r app/requirements.txt
 bash start.sh                                 # migration→uvicorn 127.0.0.1:8000
 ```
 - ログイン: ブラウザで `http://127.0.0.1:8000` → 新規登録 or テスト `test / test`
-- DBは空から始まる（クライアントデータはコミットされていない）。新規クライアント登録から試す
+- **データ入りデモで試す場合**: `cp kpi_saas.seed.db kpi_saas.db` してから起動。匿名化済み（デモ社A〜I・財務数字入り・実クライアント名/URL/ヒアリングは除去済み）で、`test / test` でログインできる
+  - ⚠️ デプロイ環境も同様に、ビルド時 `kpi_saas.seed.db` → `kpi_saas.db` をコピーすればデモにデータが載る（SQLiteの書き込み永続はプラットフォーム依存。サーバレスは書込みが揮発する点に注意）
+- seedを使わない場合はDBは空から始まる。新規クライアント登録から試す
 - ⚠️ **`venv/` は Linux 用**（WSL残骸）。Windows は `.venv/` か システムPython を使う（`start.sh` が自動判定）
 - ⚠️ コード変更時は **`/code_qa`（Codex二重レビュー）必須**（プロジェクト規約）。税計算など財務ロジックは特に
 

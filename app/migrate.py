@@ -145,6 +145,7 @@ def migrate():
             author TEXT DEFAULT '',
             publisher TEXT DEFAULT '',
             processed_content TEXT DEFAULT '',
+            full_read TEXT DEFAULT '',
             tags TEXT DEFAULT '[]',
             license_status TEXT DEFAULT 'none',
             is_active INTEGER DEFAULT 1,
@@ -152,6 +153,8 @@ def migrate():
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # 既存DBには full_read 列を後付け（全ページ読破版の器。RAG用）
+    _add_column(cursor, "reference_books", "full_read", "TEXT DEFAULT ''")
     print("  = reference_books table ready")
 
     conn.commit()

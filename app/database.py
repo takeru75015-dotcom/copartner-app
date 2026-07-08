@@ -118,7 +118,8 @@ class ReferenceBook(Base):
     title = Column(String, nullable=False)             # 書名
     author = Column(String, default="")               # 著者
     publisher = Column(String, default="")            # 出版社
-    processed_content = Column(Text, default="")      # 解析用に取り込んだ本文/要点テキスト
+    processed_content = Column(Text, default="")      # 解析に注入する「核」（提案に使える判断軸を圧縮。注入上限に効く）
+    full_read = Column(Text, default="")              # 全ページ読破版の全文（RAG用の器。注入はしない）
     tags = Column(Text, default="[]")                 # JSON配列
     license_status = Column(String, default="none")   # none / licensed（出版社許諾の有無）
     is_active = Column(Integer, default=1)            # 0/1
