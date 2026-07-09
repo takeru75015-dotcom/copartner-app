@@ -1,4 +1,7 @@
 import json
+import uuid
+import io
+import types
 from fastapi import FastAPI, Request, Form, Depends, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -767,3 +770,103 @@ def reanalyze(fd_id: int, request: Request, db: Session = Depends(get_db)):
     db.query(Analysis).filter(Analysis.financial_data_id == fd_id).delete()
     db.commit()
     return RedirectResponse(f"/financials/{fd_id}/analyze", status_code=302)
+
+
+# ---------------------------------------------------------------------------
+# デモモード（認証不要・DB保存なし）
+# ---------------------------------------------------------------------------
+_demo_store: dict = {}
+
+@app.get("/demo", response_class=HTMLResponse)
+def demo_page(request: Request):
+    return templates.TemplateResponse("demo.html", {"request": request, "state": "upload"})
+
+
+@app.post("/demo/upload")
+async def demo_upload(request: Request, file: UploadFile = File(...)):
+    import pdfplumber
+    content = await file.read()
+    filename = file.filename or "upload.pdf"
+
+    try:
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+
+        if not text.strip():
+            data = extract_financials_from_pdf_binary(content, filename)
+        else:
+            from .claude_client import extract_financials_from_pdf_text
+            data = extract_financials_from_pdf_text(text, filename)
+    except Exception as e:
+        return templates.TemplateResponse("demo.html", {
+            "request": request, "state": "upload", "error": str(e),
+        })
+
+    fd = types.SimpleNamespace(
+        id=0, client_id=0,
+        period=data.get("period") or "デモ期",
+        revenue=data.get("revenue") or 0,
+        cost_of_sales=data.get("cost_of_sales") or 0,
+        gross_profit=data.get("gross_profit") or 0,
+        selling_expenses=data.get("selling_expenses") or 0,
+        operating_profit=data.get("operating_profit") or 0,
+        ordinary_profit=data.get("ordinary_profit") or 0,
+        net_profit=data.get("net_profit") or 0,
+        prev_revenue=data.get("prev_revenue") or 0,
+        prev_operating_profit=data.get("prev_operating_profit") or 0,
+        total_assets=data.get("total_assets") or 0,
+        current_assets=data.get("current_assets") or 0,
+        cash=data.get("cash") or 0,
+        receivables=data.get("receivables") or 0,
+        inventory=data.get("inventory") or 0,
+        total_liabilities=data.get("total_liabilities") or 0,
+        current_liabilities=data.get("current_liabilities") or 0,
+        interest_bearing_debt=data.get("interest_bearing_debt") or 0,
+        equity=data.get("equity") or 0,
+        employees=data.get("employees") or 0,
+        breakdown_json=json.dumps(data.get("breakdown") or {}, ensure_ascii=False),
+    )
+
+    try:
+        result = analyze_financials(fd, "サンプル株式会社", "")
+    except Exception as e:
+        return templates.TemplateResponse("demo.html", {
+            "request": request, "state": "upload", "error": str(e),
+        })
+
+    demo_id = str(uuid.uuid4())
+    _demo_store[demo_id] = {"fd": fd, "result": result}
+
+    resp = RedirectResponse("/demo/result", status_code=302)
+    resp.set_cookie("demo_id", demo_id, max_age=3600, httponly=True)
+    return resp
+
+
+@app.get("/demo/result", response_class=HTMLResponse)
+def demo_result(request: Request):
+    demo_id = request.cookies.get("demo_id")
+    if not demo_id or demo_id not in _demo_store:
+        return RedirectResponse("/demo", status_code=302)
+
+    store = _demo_store[demo_id]
+    fd = store["fd"]
+    result = store["result"]
+
+    client = types.SimpleNamespace(
+        id=0, name="サンプル株式会社", industry="", business_details="",
+    )
+
+    try:
+        breakdown = json.loads(fd.breakdown_json or "{}")
+    except Exception:
+        breakdown = {}
+
+    return templates.TemplateResponse("demo.html", {
+        "request": request,
+        "state": "result",
+        "client": client,
+        "fd": fd,
+        "result": result,
+        "breakdown": breakdown,
+        "user": None,
+    })

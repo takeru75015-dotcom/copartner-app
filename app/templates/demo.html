@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taxel デモ</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+  body { background: #f8f9fa; font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; }
+  .demo-nav { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); padding: 14px 0; }
+  .demo-nav .brand { color: #fff; font-size: 1.3rem; font-weight: 700; text-decoration: none; letter-spacing: .03em; }
+  .demo-badge { background: rgba(255,255,255,.2); color: #fff; font-size: .7rem; padding: 2px 10px; border-radius: 99px; font-weight: 700; letter-spacing: .08em; vertical-align: middle; margin-left: 10px; }
+  .card { border: none; box-shadow: 0 2px 12px rgba(0,0,0,.08); border-radius: 12px; }
+
+  /* Upload */
+  .upload-zone { border: 2.5px dashed #c7d2fe; border-radius: 16px; padding: 40px 30px; text-align: center; transition: all .2s; cursor: pointer; background: #fff; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: #6366f1; background: #eef2ff; }
+  .upload-icon { font-size: 3rem; color: #6366f1; margin-bottom: 12px; }
+
+  /* Loading overlay */
+  #loadingOverlay { display: none; position: fixed; inset: 0; background: rgba(26,35,126,.85); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
+  #loadingOverlay.show { display: flex; }
+  .spinner-ring { width: 64px; height: 64px; border: 5px solid rgba(255,255,255,.2); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-steps { list-style: none; padding: 0; margin: 0; }
+  .loading-steps li { padding: 4px 0; font-size: .95rem; opacity: .7; }
+  .loading-steps li.current { opacity: 1; font-weight: 700; }
+  .loading-steps li.done { opacity: .5; text-decoration: line-through; }
+
+  /* Result page */
+  .key-insight { background: linear-gradient(135deg, #fff7ed, #ffedd5); border: 2px solid #fb923c; border-radius: 12px; padding: 18px 22px; margin-bottom: 24px; }
+  .key-insight-label { font-size: .75rem; color: #c2410c; font-weight: 700; letter-spacing: .1em; margin-bottom: 6px; }
+  .key-insight-text { font-size: 1.05rem; color: #7c2d12; font-weight: 600; line-height: 1.6; }
+  .score-circle { width: 90px; height: 90px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: 700; color: #fff; }
+  .metric-card { background: #fff; border-radius: 10px; padding: 16px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.06); border-top: 3px solid var(--c, #3b82f6); }
+  .metric-label { font-size: .75rem; color: #6b7280; font-weight: 600; letter-spacing: .03em; }
+  .metric-value { font-size: 1.4rem; font-weight: 700; color: #111827; margin-top: 2px; }
+  .metric-sub { font-size: .7rem; color: #9ca3af; margin-top: 4px; }
+  .c-blue { --c: #3b82f6; } .c-green { --c: #22c55e; } .c-orange { --c: #f59e0b; } .c-red { --c: #ef4444; }
+  .strength-item { border-left: 3px solid #22c55e; padding-left: .75rem; margin-bottom: .5rem; font-size: .9rem; }
+  .issue-item { border-left: 3px solid #ef4444; padding-left: .75rem; margin-bottom: .5rem; font-size: .9rem; }
+  .action-card { border-left: 5px solid var(--pc, #3b82f6); background: #fff; border-radius: 10px; padding: 14px 16px; box-shadow: 0 2px 8px rgba(0,0,0,.04); margin-bottom: 12px; }
+  .action-card.prio-高, .action-card.urg-急務 { --pc: #ef4444; }
+  .action-card.prio-中, .action-card.urg-重要 { --pc: #f59e0b; }
+  .action-card.prio-低, .action-card.urg-推奨 { --pc: #22c55e; }
+  .action-title { font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .action-detail { color: #374151; font-size: .87rem; margin-bottom: 6px; }
+  .impact-pill { display: inline-block; background: #fef3c7; color: #b45309; padding: 3px 10px; border-radius: 99px; font-size: .78rem; font-weight: 700; }
+  .idea-card { background: #fff; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  .idea-title { font-size: .95rem; font-weight: 700; color: #9a3412; }
+  .idea-impact { color: #ea580c; font-weight: 700; font-size: .82rem; margin-top: 3px; }
+  .cost-card { background: #fff; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  .cost-title { font-size: .95rem; font-weight: 700; color: #991b1b; }
+  .cost-savings { color: #dc2626; font-weight: 700; font-size: .82rem; margin-top: 3px; }
+  .hearing-q { padding: 6px 0; border-bottom: 1px dashed #fde68a; font-size: .87rem; color: #374151; }
+  .hearing-q:last-child { border-bottom: none; }
+  .section-title { font-size: .85rem; font-weight: 700; color: #6b7280; letter-spacing: .06em; margin-bottom: 12px; text-transform: uppercase; }
+  .cta-box { background: linear-gradient(135deg, #1a237e, #283593); border-radius: 16px; padding: 32px; text-align: center; margin-top: 40px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  @media (max-width: 768px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+
+<!-- ナビゲーション -->
+<nav class="demo-nav">
+  <div class="container">
+    <a class="brand" href="/demo">
+      <i class="fas fa-chart-line me-2"></i>Taxel
+      <span class="demo-badge">DEMO</span>
+    </a>
+    <a href="/login" class="btn btn-outline-light btn-sm float-end">ログインして本格利用 →</a>
+  </div>
+</nav>
+
+<div class="container py-4">
+
+{% if state == 'upload' %}
+<!-- ============================================================ -->
+<!--  アップロード画面                                             -->
+<!-- ============================================================ -->
+<div class="row justify-content-center mt-3">
+  <div class="col-md-7 col-lg-6">
+    <div class="text-center mb-5">
+      <h1 class="fw-bold" style="color:#1a237e; font-size:2rem;">決算書をアップロード</h1>
+      <p class="text-muted mt-2">PDFを1枚アップロードするだけ。AIが瞬時に財務を分析します。<br>登録・ログイン不要で試せます。</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger mb-4">
+      <i class="fas fa-exclamation-triangle me-2"></i><strong>エラーが発生しました</strong><br>
+      <small>{{ error }}</small>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/demo/upload" enctype="multipart/form-data" id="uploadForm">
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('pdfFile').click()">
+        <div class="upload-icon"><i class="fas fa-file-pdf"></i></div>
+        <h5 class="fw-bold mb-1">PDFをここにドロップ</h5>
+        <p class="text-muted small mb-3">または クリックしてファイルを選択</p>
+        <span class="btn btn-outline-primary btn-sm"><i class="fas fa-folder-open me-1"></i>ファイルを選ぶ</span>
+        <input type="file" name="file" id="pdfFile" accept=".pdf" required style="display:none;" onchange="onFileSelected(this)">
+      </div>
+      <div id="fileInfo" class="mt-3 p-3 bg-white rounded-3 border" style="display:none;">
+        <i class="fas fa-file-pdf text-danger me-2"></i>
+        <span id="fileName" class="fw-semibold"></span>
+        <span id="fileSize" class="text-muted small ms-2"></span>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg w-100 mt-4 fw-bold" id="submitBtn" style="background:#1a237e;border-color:#1a237e; display:none;" onclick="showLoading()">
+        <i class="fas fa-robot me-2"></i>AIで財務を分析する
+      </button>
+    </form>
+
+    <div class="row text-center mt-5 g-3">
+      <div class="col-4">
+        <div class="text-primary fs-4 mb-1"><i class="fas fa-bolt"></i></div>
+        <div class="fw-bold small">高速分析</div>
+        <div class="text-muted" style="font-size:.75rem;">数秒で完了</div>
+      </div>
+      <div class="col-4">
+        <div class="text-success fs-4 mb-1"><i class="fas fa-shield-alt"></i></div>
+        <div class="fw-bold small">安全</div>
+        <div class="text-muted" style="font-size:.75rem;">データは保存しません</div>
+      </div>
+      <div class="col-4">
+        <div class="text-warning fs-4 mb-1"><i class="fas fa-star"></i></div>
+        <div class="fw-bold small">AI精度</div>
+        <div class="text-muted" style="font-size:.75rem;">Claude活用</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ローディングオーバーレイ -->
+<div id="loadingOverlay">
+  <div class="spinner-ring"></div>
+  <h4 class="fw-bold mb-3">AIが分析中...</h4>
+  <ul class="loading-steps" id="loadingSteps">
+    <li class="current" id="step1"><i class="fas fa-file-pdf me-2"></i>PDFを読み込み中</li>
+    <li id="step2"><i class="fas fa-robot me-2"></i>Claude AIで数値を抽出中</li>
+    <li id="step3"><i class="fas fa-chart-line me-2"></i>財務分析を実行中</li>
+    <li id="step4"><i class="fas fa-lightbulb me-2"></i>改善提案を生成中</li>
+  </ul>
+  <p class="mt-4 text-white-50 small">通常30〜60秒かかります</p>
+</div>
+
+{% else %}
+<!-- ============================================================ -->
+<!--  分析結果画面                                                 -->
+<!-- ============================================================ -->
+
+<!-- 会社・期間ヘッダー -->
+<div class="card p-3 mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+      <h4 class="fw-bold mb-1">{{ client.name }} <span class="text-muted small">— {{ fd.period }}</span></h4>
+      <span class="badge" style="background:#e0e7ff; color:#4338ca; font-size:.75rem;">デモモード</span>
+    </div>
+    <a href="/demo" class="btn btn-outline-primary btn-sm"><i class="fas fa-redo me-1"></i>別のPDFで試す</a>
+  </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+  <i class="fas fa-exclamation-triangle me-2"></i>分析中にエラーが発生しました。<br>
+  <small>{{ error }}</small>
+</div>
+{% elif result %}
+
+{# Key Insight #}
+{% if result.key_insight %}
+<div class="key-insight">
+  <div class="key-insight-label">💡 最重要ポイント</div>
+  <div class="key-insight-text">{{ result.key_insight }}</div>
+</div>
+{% endif %}
+
+{# スコア + サマリー #}
+<div class="card p-4 mb-4">
+  <div class="row align-items-center g-3">
+    <div class="col-auto">
+      <div class="score-circle"
+           style="background: {% if result.score >= 70 %}#22c55e{% elif result.score >= 50 %}#f59e0b{% else %}#ef4444{% endif %};">
+        {{ result.score }}
+      </div>
+    </div>
+    <div class="col">
+      <div class="fw-bold fs-5 mb-1">
+        {{ result.score_label or ('優良' if result.score >= 70 else '注意' if result.score >= 50 else '危険') }}
+      </div>
+      <div class="text-muted" style="font-size:.92rem; line-height:1.6;">{{ result.summary }}</div>
+    </div>
+  </div>
+</div>
+
+{# KPI メトリクス #}
+<div class="kpi-row mb-4">
+  <div class="metric-card c-blue">
+    <div class="metric-label"><i class="fas fa-yen-sign me-1"></i>売上高</div>
+    <div class="metric-value">{{ "{:,.0f}".format(fd.revenue) }}万</div>
+    <div class="metric-sub">{{ fd.period }}</div>
+  </div>
+  <div class="metric-card c-green">
+    <div class="metric-label"><i class="fas fa-percentage me-1"></i>粗利率</div>
+    <div class="metric-value">{{ "{:.1f}".format(fd.gross_profit / fd.revenue * 100 if fd.revenue else 0) }}%</div>
+    <div class="metric-sub">粗利 {{ "{:,.0f}".format(fd.gross_profit) }}万</div>
+  </div>
+  <div class="metric-card c-orange">
+    <div class="metric-label"><i class="fas fa-chart-line me-1"></i>営業利益</div>
+    <div class="metric-value">{{ "{:+,.0f}".format(fd.operating_profit) }}万</div>
+    <div class="metric-sub">営業利益率 {{ "{:.1f}".format(fd.operating_profit / fd.revenue * 100 if fd.revenue else 0) }}%</div>
+  </div>
+  <div class="metric-card {% if fd.net_profit >= 0 %}c-green{% else %}c-red{% endif %}">
+    <div class="metric-label"><i class="fas fa-coins me-1"></i>当期純利益</div>
+    <div class="metric-value">{{ "{:+,.0f}".format(fd.net_profit) }}万</div>
+    {% if fd.cash %}
+    <div class="metric-sub">現預金 {{ "{:,.0f}".format(fd.cash) }}万</div>
+    {% endif %}
+  </div>
+</div>
+
+{# 強み・課題 2列 #}
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="section-title"><i class="fas fa-thumbs-up me-1 text-success"></i>強み</div>
+      {% if result.strengths %}
+        {% for s in result.strengths %}
+        <div class="strength-item">{{ s }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="text-muted small">データが不足しています</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="section-title"><i class="fas fa-exclamation-circle me-1 text-danger"></i>課題</div>
+      {% if result.issues %}
+        {% for i in result.issues %}
+        <div class="issue-item">{{ i }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="text-muted small">課題は検出されませんでした</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# アクション #}
+{% if result.actions %}
+<div class="card p-3 mb-4">
+  <div class="section-title mb-3"><i class="fas fa-tasks me-1"></i>推奨アクション</div>
+  {% for a in result.actions %}
+  <div class="action-card prio-{{ a.priority or '中' }} urg-{{ a.urgency or '' }}">
+    <div class="d-flex align-items-start gap-2 flex-wrap mb-1">
+      <div class="action-title">{{ a.title }}</div>
+      {% if a.impact %}<span class="impact-pill">{{ a.impact }}</span>{% endif %}
+    </div>
+    <div class="action-detail">{{ a.detail }}</div>
+    {% if a.first_step %}
+    <div class="small text-primary"><i class="fas fa-arrow-right me-1"></i><strong>明日の一歩：</strong>{{ a.first_step }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 売上アイデア #}
+{% if result.revenue_ideas %}
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="section-title"><i class="fas fa-rocket me-1 text-warning"></i>売上アップ アイデア</div>
+      {% for idea in result.revenue_ideas %}
+      <div class="idea-card">
+        <div class="idea-title">{{ idea.title }}</div>
+        {% if idea.impact_min is defined and idea.impact_max is defined %}
+        <div class="idea-impact">年間 +{{ "{:,.0f}".format(idea.impact_min) }}〜{{ "{:,.0f}".format(idea.impact_max) }}万円</div>
+        {% endif %}
+        <div class="text-muted small mt-1">{{ idea.why }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% if result.cost_ideas %}
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <div class="section-title"><i class="fas fa-scissors me-1 text-danger"></i>コスト削減 アイデア</div>
+      {% for idea in result.cost_ideas %}
+      <div class="cost-card">
+        <div class="cost-title">{{ idea.title }}</div>
+        {% if idea.savings_max is defined %}
+        <div class="cost-savings">年間 最大 -{{ "{:,.0f}".format(idea.savings_max) }}万円</div>
+        {% endif %}
+        <div class="text-muted small mt-1">{{ idea.why }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ヒアリングシート #}
+{% if result.hearing_sheet %}
+<div class="card p-3 mb-4">
+  <div class="section-title"><i class="fas fa-comments me-1 text-warning"></i>社長への確認事項（ヒアリングシート）</div>
+  <div class="p-3" style="background:#fffbeb; border-radius:8px; border:1px solid #fde68a;">
+    {% set hs = result.hearing_sheet %}
+    {% for q in (hs.business_understanding or []) + (hs.customer_market or []) + (hs.growth_opportunity or []) + (hs.debt_and_finance or []) %}
+    <div class="hearing-q"><i class="fas fa-question-circle text-warning me-2"></i>{{ q }}</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# CTAボックス #}
+<div class="cta-box">
+  <h4 class="text-white fw-bold mb-2">本格的な分析はこちらから</h4>
+  <p class="text-white-50 mb-4">複数期・複数クライアントの管理、詳細な比較分析、補助金提案など<br>すべての機能をご利用いただけます。</p>
+  <div class="d-flex gap-3 justify-content-center flex-wrap">
+    <a href="/register" class="btn btn-warning btn-lg fw-bold px-5">無料で始める</a>
+    <a href="/demo" class="btn btn-outline-light btn-lg">別のPDFで試す</a>
+  </div>
+</div>
+
+{% endif %}{# end result #}
+{% endif %}{# end state #}
+
+</div><!-- /container -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ファイル選択時
+function onFileSelected(input) {
+  if (!input.files.length) return;
+  const file = input.files[0];
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = (file.size / 1024).toFixed(0) + ' KB';
+  document.getElementById('fileInfo').style.display = 'block';
+  document.getElementById('submitBtn').style.display = 'block';
+}
+
+// ドラッグ&ドロップ
+const zone = document.getElementById('uploadZone');
+if (zone) {
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length) {
+      document.getElementById('pdfFile').files = files;
+      onFileSelected(document.getElementById('pdfFile'));
+    }
+  });
+}
+
+// ローディング表示
+function showLoading() {
+  document.getElementById('loadingOverlay').classList.add('show');
+  const steps = ['step1','step2','step3','step4'];
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i > 0) {
+      document.getElementById(steps[i-1]).classList.remove('current');
+      document.getElementById(steps[i-1]).classList.add('done');
+    }
+    if (i < steps.length) {
+      document.getElementById(steps[i]).classList.add('current');
+      i++;
+    } else {
+      clearInterval(interval);
+    }
+  }, 12000);
+}
+</script>
+</body>
+</html>
